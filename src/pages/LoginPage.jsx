@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 
-// 👇 URL BACKEND OTOMATIS: Mendeteksi lokal komputer atau server live Render
-const BACKEND_URL = window.location.hostname === "localhost"
-  ? "http://localhost:4000"
-  : "https://royal-cue-backend.onrender.com"; // 👈 Otomatis terhubung ke backend live kamu
+// ✅ PERUBAHAN: Menggunakan environment variable Vite
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
+  (window.location.hostname === "localhost" 
+    ? "http://localhost:4000" 
+    : "https://royal-cue-backend.onrender.com");
 
 export default function LoginPage({ roleLogin }) {
-  const navigate = useNavigate(); // 👈 Mengaktifkan navigasi antar halaman
+  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -19,7 +20,6 @@ export default function LoginPage({ roleLogin }) {
     setLoading(true);
 
     try {
-      // Mengirim request login ke URL Backend dinamis
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: "POST",
         headers: {
@@ -37,12 +37,16 @@ export default function LoginPage({ roleLogin }) {
       if (response.ok) {
         setLoading(false);
         
-        // Simpan token login ke localStorage proyekmu
-        localStorage.setItem("token_kasir", data.token || "authenticated");
-        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("token", data.token || "authenticated");
+        localStorage.setItem("role", data.role || roleLogin);
+        localStorage.setItem("username", data.username || username);
         
-        // 🚀 PINDAH HALAMAN: Langsung dialihkan ke rute kasir-dashboard proyekmu!
-        navigate("/kasir-dashboard");
+        // Arahkan sesuai role
+        if (data.role === "admin") {
+          navigate("/admin-dashboard");
+        } else {
+          navigate("/kasir-dashboard");
+        }
       } else {
         throw new Error(data.message || "Username atau password salah");
       }
@@ -57,11 +61,9 @@ export default function LoginPage({ roleLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#060b13] flex flex-col items-center justify-center px-4 font-sans selection:bg-[#4ade80]/30">
-      
-      {/* 👑 KELOMPOK HEADER: MAHKOTA & NAMA STUDIO */}
+    <div className="min-h-screen bg-[#060b13] flex flex-col items-center justify-center px-4 font-sans">
       <div className="text-center mb-6">
-        <div className="text-amber-400 text-3xl mb-3 flex justify-center drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]">
+        <div className="text-amber-400 text-3xl mb-3 flex justify-center">
           👑
         </div>
         <h2 className="text-[11px] font-bold tracking-[0.25em] text-slate-400 uppercase mb-1">
@@ -75,12 +77,8 @@ export default function LoginPage({ roleLogin }) {
         </p>
       </div>
 
-      {/* 📦 KOTAK CONTAINER FORM UTAMA */}
       <div className="w-full max-w-sm bg-[#0f172a]/90 border border-slate-800/60 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
-        
         <form onSubmit={handleLogin} className="space-y-4">
-          
-          {/* FIELD 1: INPUT USERNAME */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300">Username</label>
             <div className="relative flex items-center">
@@ -91,12 +89,11 @@ export default function LoginPage({ roleLogin }) {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 rounded-xl text-white outline-none text-sm transition-all focus:bg-[#1e293b]"
+                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 rounded-xl text-white outline-none text-sm transition-all"
               />
             </div>
           </div>
 
-          {/* FIELD 2: INPUT PASSWORD */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300">Password</label>
             <div className="relative flex items-center">
@@ -107,7 +104,7 @@ export default function LoginPage({ roleLogin }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 pr-11 rounded-xl text-white outline-none text-sm transition-all focus:bg-[#1e293b]"
+                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 pr-11 rounded-xl text-white outline-none text-sm transition-all"
               />
               <button
                 type="button"
@@ -119,7 +116,6 @@ export default function LoginPage({ roleLogin }) {
             </div>
           </div>
 
-          {/* 🔘 TOMBOL SUBMIT HIJAU TOSKA */}
           <button
             type="submit"
             disabled={loading}
@@ -129,7 +125,6 @@ export default function LoginPage({ roleLogin }) {
           </button>
         </form>
 
-        {/* 📑 INFO AKUN DEMO DI BAGIAN BAWAH */}
         <div className="mt-6 pt-5 border-t border-slate-800/80">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
             Demo Login
@@ -145,7 +140,6 @@ export default function LoginPage({ roleLogin }) {
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

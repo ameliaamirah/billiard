@@ -1,22 +1,17 @@
 import { useEffect, useState } from "react";
 import { 
-  FaPlay, FaStop, FaPrint, FaDiceD6, FaUser, FaInfoCircle, 
-  FaClock, FaSearch, FaMinusCircle, FaPlusCircle, FaSignOutAlt, 
-  FaWallet, FaCashRegister, FaUtensils, FaMoneyBillWave, FaQrcode 
+  FaPlay, FaStop, FaPrint, FaDiceD6, FaUser, FaClock, 
+  FaSearch, FaMinusCircle, FaPlusCircle, FaSignOutAlt, 
+  FaWallet, FaUtensils, FaMoneyBillWave, FaQrcode 
 } from "react-icons/fa";
 import FandBModal from "../components/FandBModal"; 
 
-/* ========================================================
-    🔗 KONFIGURASI URL BACKEND OTOMATIS (DYNAMIC URL)
-   ======================================================== */
-// JIKA DI LOCALHOST PAKAI PORT 4000, JIKA LIVE PAKAI SERVER BACKEND INTERNETMU
-const BACKEND_URL = window.location.hostname === "localhost" 
-  ? "http://localhost:4000" 
-  : "https://royal-cue-backend.onrender.com"; // 👈 GANTI LINK INI DENGAN URL BACKEND RENDER / RAILWAY KAMU YANG SEBENARNYA!
+// ✅ PERUBAHAN: Menggunakan environment variable Vite
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
+  (window.location.hostname === "localhost" 
+    ? "http://localhost:4000" 
+    : "https://royal-cue-backend.onrender.com");
 
-/* ========================================================
-    🕒 SUB-KOMPONEN: LIVE TIMER (COUNTDOWN & STOPWATCH)
-   ======================================================== */
 function TableTimer({ jamMulai, durasiJam, status }) {
   const [timeLeft, setTimeLeft] = useState("");
   const [isOvertime, setIsOvertime] = useState(false);
@@ -76,24 +71,15 @@ function TableTimer({ jamMulai, durasiJam, status }) {
   );
 }
 
-/* ========================================================
-    🖥️ KOMPONEN UTAMA: KASIR DASHBOARD (V.2.5 - MULTI-PAYMENT & SLIM LAYOUT)
-   ======================================================== */
 export default function KasirDashboard() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // State Utama: Filter & Search
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("Semua");
-
-  // State Utama: Keuangan Laci
   const [modalAwal, setModalAwal] = useState(0);
   const [pengeluaranList, setPengeluaranList] = useState([]);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [tempExpense, setTempExpense] = useState({ amount: "", note: "" });
-
-  // State Kontrol per Meja (Diskon, Charge, F&B, & Metode Pembayaran)
   const [diskonMap, setDiskonMap] = useState({});
   const [chargeMap, setChargeMap] = useState({});
   const [fbMap, setFbMap] = useState({});
@@ -112,7 +98,6 @@ export default function KasirDashboard() {
 
   const fetchData = async () => {
     try {
-      // Mengganti localhost dengan variabel BACKEND_URL
       const res = await fetch(`${BACKEND_URL}/api/kasir/reservasi`, { headers: getHeaders() });
       const result = await res.json();
       if (Array.isArray(result)) { setData(result); }
@@ -132,7 +117,6 @@ export default function KasirDashboard() {
 
   const startGame = async (id) => {
     try {
-      // Mengganti localhost dengan variabel BACKEND_URL
       const res = await fetch(`${BACKEND_URL}/api/kasir/start/${id}`, { method: "POST", headers: getHeaders() });
       if ((await res.json()).success) fetchData();
     } catch (error) { alert("Gagal koneksi ke server!"); }
@@ -140,7 +124,6 @@ export default function KasirDashboard() {
 
   const stopGame = async (id) => {
     try {
-      // Mengganti localhost dengan variabel BACKEND_URL
       const res = await fetch(`${BACKEND_URL}/api/kasir/stop/${id}`, { method: "POST", headers: getHeaders() });
       if ((await res.json()).success) fetchData();
     } catch (error) { alert("Gagal koneksi ke server!"); }
@@ -154,9 +137,6 @@ export default function KasirDashboard() {
     setIsExpenseOpen(false);
   };
 
-  /* ========================================================
-      🔥 CETAK REKAP LAPORAN TUTUP SHIFT LENGKAP (58MM)
-     ======================================================== */
   const handleTutupShift = () => {
     const konfirmasi = window.confirm("Yakin ingin tutup shift & cetak rekap?");
     if (!konfirmasi) return;
@@ -232,9 +212,6 @@ export default function KasirDashboard() {
     pWin.document.close();
   };
 
-  /* ========================================================
-      🔥 CETAK STRUK TRANSAKSI MEJA PELANGGAN (THERMAL POOR-FIX)
-     ======================================================== */
   const printStruk = (id) => {
     const item = data.find(x => x.id === id);
     if (!item) {
@@ -330,8 +307,6 @@ export default function KasirDashboard() {
 
   return (
     <div className="px-4 pb-4 md:px-8 md:pb-8 pt-1 max-w-7xl mx-auto space-y-4">
-      
-      {/* 🏷️ JUDUL HALAMAN & STATUS LIVE */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1.5 border-b border-slate-900 pb-2">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-white tracking-tight">
@@ -345,7 +320,6 @@ export default function KasirDashboard() {
         </div>
       </div>
 
-      {/* 🛠️ CONTROL PANEL */}
       <div className="flex flex-col xl:flex-row gap-3 bg-slate-900/60 border border-slate-800 p-4 rounded-xl backdrop-blur-xl">
         <div className="flex flex-wrap gap-2 items-center border-b xl:border-b-0 xl:border-r border-slate-800 pb-3 xl:pb-0 xl:pr-4">
           <div className="flex items-center gap-2.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
@@ -400,11 +374,10 @@ export default function KasirDashboard() {
         </div>
       </div>
 
-      {/* EXPENSE MODAL OVERLAY */}
       {isExpenseOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl w-full max-w-sm shadow-2xl">
-            <h3 className="text-white font-bold mb-3 flex items-center gap-2 text-sm"><FaCashRegister /> Catat Kas Keluar</h3>
+            <h3 className="text-white font-bold mb-3 flex items-center gap-2 text-sm"><FaWallet /> Catat Kas Keluar</h3>
             <form onSubmit={handleAddExpense} className="space-y-3">
               <input 
                 type="number" placeholder="Nominal (Rp)" autoFocus required
@@ -425,7 +398,6 @@ export default function KasirDashboard() {
         </div>
       )}
 
-      {/* GRID KARTU MEJA */}
       {filteredData.length === 0 ? (
         <div className="text-center p-10 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-500 text-xs">
           Tidak ada data kontrol meja yang cocok.
@@ -489,7 +461,6 @@ export default function KasirDashboard() {
                     </div>
                   </div>
 
-                  {/* 💳 TOGGLE MINI METHOD */}
                   <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950 border border-slate-800/60 rounded-xl">
                     <button
                       type="button"
@@ -524,7 +495,6 @@ export default function KasirDashboard() {
         </div>
       )}
 
-      {/* MODAL KANTIN F&B */}
       {activeFbModal && (
         <FandBModal
           isOpen={activeFbModal !== null}
@@ -535,7 +505,6 @@ export default function KasirDashboard() {
           onSave={(idMeja, dataBelanjaan) => setFbMap({ ...fbMap, [idMeja]: dataBelanjaan })}
         />
       )}
-
     </div>
   );
 }
