@@ -7,6 +7,14 @@ import {
 import FandBModal from "../components/FandBModal"; 
 
 /* ========================================================
+    🔗 KONFIGURASI URL BACKEND OTOMATIS (DYNAMIC URL)
+   ======================================================== */
+// JIKA DI LOCALHOST PAKAI PORT 4000, JIKA LIVE PAKAI SERVER BACKEND INTERNETMU
+const BACKEND_URL = window.location.hostname === "localhost" 
+  ? "http://localhost:4000" 
+  : "https://royal-cue-backend.onrender.com"; // 👈 GANTI LINK INI DENGAN URL BACKEND RENDER / RAILWAY KAMU YANG SEBENARNYA!
+
+/* ========================================================
     🕒 SUB-KOMPONEN: LIVE TIMER (COUNTDOWN & STOPWATCH)
    ======================================================== */
 function TableTimer({ jamMulai, durasiJam, status }) {
@@ -104,7 +112,8 @@ export default function KasirDashboard() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/kasir/reservasi", { headers: getHeaders() });
+      // Mengganti localhost dengan variabel BACKEND_URL
+      const res = await fetch(`${BACKEND_URL}/api/kasir/reservasi`, { headers: getHeaders() });
       const result = await res.json();
       if (Array.isArray(result)) { setData(result); }
       else if (result.success && Array.isArray(result.data)) { setData(result.data); }
@@ -123,14 +132,16 @@ export default function KasirDashboard() {
 
   const startGame = async (id) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/kasir/start/${id}`, { method: "POST", headers: getHeaders() });
+      // Mengganti localhost dengan variabel BACKEND_URL
+      const res = await fetch(`${BACKEND_URL}/api/kasir/start/${id}`, { method: "POST", headers: getHeaders() });
       if ((await res.json()).success) fetchData();
     } catch (error) { alert("Gagal koneksi ke server!"); }
   };
 
   const stopGame = async (id) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/kasir/stop/${id}`, { method: "POST", headers: getHeaders() });
+      // Mengganti localhost dengan variabel BACKEND_URL
+      const res = await fetch(`${BACKEND_URL}/api/kasir/stop/${id}`, { method: "POST", headers: getHeaders() });
       if ((await res.json()).success) fetchData();
     } catch (error) { alert("Gagal koneksi ke server!"); }
   };
@@ -254,7 +265,6 @@ export default function KasirDashboard() {
         <head>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Inconsolata:wght@400;700&display=swap');
-            /* Memaksa browser mengatur viewport kertas sesuai printer thermal roll 58mm */
             @page { size: 58mm auto; margin: 0; } 
             body { 
               font-family: 'Inconsolata', monospace; 
@@ -319,7 +329,6 @@ export default function KasirDashboard() {
   }
 
   return (
-    // ⬇️ Penyesuaian Jarak: Menggunakan pt-1, pb-4, dan space-y-4 agar tampilan nempel presisi ke atas/navbar
     <div className="px-4 pb-4 md:px-8 md:pb-8 pt-1 max-w-7xl mx-auto space-y-4">
       
       {/* 🏷️ JUDUL HALAMAN & STATUS LIVE */}
