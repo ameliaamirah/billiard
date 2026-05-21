@@ -33,14 +33,30 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* KOLOM 2: NAVIGASI CEPAT */}
+        {/* KOLOM 2: NAVIGASI CEPAT (Sudah Disesuaikan dengan Halaman Royal Cue) */}
         <div>
           <h3 className="text-white font-bold mb-6 uppercase text-xs tracking-widest">Navigasi</h3>
           <ul className="grid gap-3 text-sm">
-            <li><button onClick={() => navigate("/")} className="hover:text-[#00ff99] transition-colors cursor-pointer">Beranda</button></li>
-            <li><button onClick={() => navigate("/profil")} className="hover:text-[#00ff99] transition-colors cursor-pointer">Tentang Kami</button></li>
-            <li><button onClick={() => navigate("/profil")} className="hover:text-[#00ff99] transition-colors cursor-pointer">Struktur Organisasi</button></li>
-            <li><button onClick={() => navigate("/kontak-kami")} className="hover:text-[#00ff99] transition-colors cursor-pointer">Reservasi</button></li>
+            <li>
+              <button onClick={() => navigate("/")} className="hover:text-[#00ff99] transition-colors cursor-pointer text-left w-full">
+                Beranda
+              </button>
+            </li>
+            <li>
+              <button onClick={() => navigate("/reservasi")} className="hover:text-[#00ff99] transition-colors cursor-pointer text-left w-full">
+                Reservasi Meja
+              </button>
+            </li>
+            <li>
+              <button onClick={() => navigate("/leaderboard")} className="hover:text-[#00ff99] transition-colors cursor-pointer text-left w-full">
+                Leaderboard Player
+              </button>
+            </li>
+            <li>
+              <button onClick={() => navigate("/statistik")} className="hover:text-[#00ff99] transition-colors cursor-pointer text-left w-full">
+                Statistik Member
+              </button>
+            </li>
           </ul>
         </div>
 

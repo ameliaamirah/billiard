@@ -1,49 +1,117 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
+
+/* =========================================
+   PAGES
+========================================= */
+import HomePage from "./pages/HomePage";
+import Reservasi from "./pages/ReservasiPage";
+import Leaderboard from "./pages/LeaderboardPage";
+import StatistikPage from "./pages/StatistikPage";
+import LoginPage from "./pages/LoginPage";
+import AdminDashboard from "./pages/AdminDashboard";
+
+// Import Komponen Pembungkus Utama Baru untuk Kasir
+import DashboardUtamaKasir from "./pages/DashboardUtamaKasir"; 
+
+/* =========================================
+   COMPONENTS
+========================================= */
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
-import HomePage from "./pages/HomePage";
-import ProfilePage from "./pages/ProfilePage"; // Tersedia jika nanti dibutuhkan
-import MonitoringMeja from "./pages/MonitoringMeja";
-import ContactPage from "./pages/ContactPage";
-import StrukturPage from "./pages/StrukturPage";
-import AboutPage from "./pages/AboutPage";
-import LaporanKeuangan from "./pages/LaporanKeuangan";
-import InventoryPage from "./pages/InventoryPage";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-// Komponen pembantu untuk mengatur tampilan Footer
-const LayoutContent = () => {
+/* =========================================
+   LAYOUT
+========================================= */
+function LayoutUtama() {
   const location = useLocation();
-  
-  // Perbaikan Logika: Sembunyikan Footer di halaman Beranda DAN halaman Operasional/Dashboard Kasir
-  const disabledFooterRoutes = ["/", "/monitoring-meja", "/laporan-keuangan"];
-  const hideFooter = disabledFooterRoutes.includes(location.pathname);
+
+  // Memastikan navbar & footer bawaan user umum disembunyikan saat masuk panel admin/kasir
+  const hideLayout =
+    location.pathname === "/admin" ||
+    location.pathname === "/kasir" ||
+    location.pathname === "/admin-dashboard" ||
+    location.pathname === "/kasir-dashboard";
 
   return (
-    <>
-      <Navbar />
-      
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/tentang-kami" element={<AboutPage />} />
-        <Route path="/struktur-organisasi" element={<StrukturPage />} />
-        <Route path="/kontak-kami" element={<ContactPage />} />
-        <Route path="/monitoring-meja" element={<MonitoringMeja />} />
-        <Route path="/laporan-keuangan" element={<LaporanKeuangan />} />
-        <Route path="/inventory-fnb" element={<InventoryPage />} />
-      </Routes>
+    <div className="flex flex-col min-h-screen bg-slate-950">
 
-      {!hideFooter && <Footer />}
-    </>
-  );
-};
+      {/* NAVBAR */}
+      {!hideLayout && <Navbar />}
 
-function App() {
-  return (
-    <Router>
-      <LayoutContent />
-    </Router>
+      <div className="flex-grow">
+        <Routes>
+
+          {/* =========================
+              PUBLIC / PELANGGAN
+          ========================= */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/reservasi" element={<Reservasi />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/statistik" element={<StatistikPage />} />
+
+          {/* =========================
+              LOGIN ROLE BASED
+          ========================= */}
+          <Route
+            path="/admin"
+            element={<LoginPage roleLogin="admin" />}
+          />
+
+          <Route
+            path="/kasir"
+            element={<LoginPage roleLogin="kasir" />}
+          />
+
+          {/* =========================
+              ADMIN DASHBOARD
+          ========================= */}
+          <Route
+            path="/admin-dashboard"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =========================
+              DASHBOARD UTAMA KASIR (Dua Fitur dalam Satu Rumah)
+          ========================= */}
+          <Route
+            path="/kasir-dashboard"
+            element={
+              <ProtectedRoute allowedRole="kasir">
+                {/* Komponen ini otomatis merangkum MonitorKasir & KasirDashboard 
+                  melalui sistem Tab internal navigasi.
+                */}
+                <DashboardUtamaKasir />
+              </ProtectedRoute>
+            }
+          />
+
+        </Routes>
+      </div>
+
+      {/* FOOTER */}
+      {!hideLayout && <Footer />}
+
+    </div>
   );
 }
 
-export default App;
+/* =========================================
+   APP MAIN ENTRY
+========================================= */
+export default function App() {
+  return (
+    <Router>
+      <LayoutUtama />
+    </Router>
+  );
+}

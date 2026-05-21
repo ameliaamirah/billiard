@@ -1,28 +1,27 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { FaTv, FaCrown, FaChevronRight } from "react-icons/fa"; // Mengimport ikon yang dibutuhkan
+import { FaTv, FaCrown, FaChevronRight } from "react-icons/fa";
 
 const HomePage = () => {
   const navigate = useNavigate();
 
   return (
-    // Gambar penuh satu layar, konten diatur ke tengah secara vertikal & horizontal
     <div 
       className="h-screen w-full bg-cover bg-center bg-no-repeat relative flex items-center justify-center overflow-hidden text-white"
       style={{ backgroundImage: "url('/images/home.png')" }}
     >
       
-      {/* OVERLAY SINETIK SIMETRIS: Efek gelap melingkar (vignette) agar fokus mata tetap ke tengah */}
+      {/* OVERLAY SINETIK SIMETRIS */}
       <div className="absolute inset-0 bg-radial from-transparent via-slate-950/60 to-slate-950/90 z-0" />
       <div className="absolute inset-0 bg-slate-950/50 z-0" />
       
-      {/* AKSEN EMERALD GLOW: Pendaran lampu hijau biliar tepat di belakang teks utama */}
+      {/* AKSEN EMERALD GLOW */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#00CC7A]/15 rounded-full blur-[180px] pointer-events-none z-0" />
 
-      {/* KONTEN UTAMA (RATA TENGAH) */}
+      {/* KONTEN UTAMA */}
       <div className="max-w-4xl mx-auto w-full px-6 sm:px-12 relative z-10 flex flex-col items-center text-center">
         
-        {/* BADGE PRESTISIUS DENGAN IKON MAHKOTA */}
+        {/* BADGE PRESTISIUS */}
         <div className="flex justify-center">
           <span className="flex items-center gap-2 text-[#00ff99] font-black tracking-widest text-[10px] uppercase bg-[#00CC7A]/20 px-4 py-2 rounded-full border border-[#00CC7A]/40 backdrop-blur-sm shadow-inner">
             <FaCrown className="text-xs text-amber-400 animate-pulse" /> Premium Sport Lounge
@@ -42,20 +41,19 @@ const HomePage = () => {
           Kelola ketersediaan meja biliar premium, perhitungan billing otomatis real-time, dan pemesanan layanan F&B terintegrasi dalam satu sistem modern.
         </p>
 
-        {/* TOMBOL AKSI UTAMA DENGAN IKON MONITOR & PANAH */}
+        {/* TOMBOL AKSI UTAMA (Diubah Navigasinya ke halaman Reservasi Pelanggan) */}
         <div className="flex justify-center">
           <button 
-            onClick={() => navigate("/monitoring-meja")}
+            onClick={() => navigate("/reservasi")}
             className="flex items-center gap-3 bg-[#00aa66] hover:bg-[#00cc7a] text-white font-black text-sm px-8 py-4 rounded-xl transition-all duration-300 shadow-xl shadow-[#00aa66]/30 hover:shadow-[#00aa66]/50 active:scale-95 cursor-pointer group"
           >
             <FaTv className="text-base" />
-            <span>Buka Live Monitor</span>
+            <span>Reservasi Meja</span>
             <FaChevronRight className="text-xs transition-transform duration-300 group-hover:translate-x-1" />
           </button>
         </div>
 
       </div>
-
     </div>
   );
 };
