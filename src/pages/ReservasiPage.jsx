@@ -2,6 +2,11 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaUser, FaPhoneAlt, FaClock, FaDiceD6, FaMoneyBillWave } from "react-icons/fa";
 
+// 👇 SEKARANG URL BACKEND OTOMATIS DAN DINAMIS
+const BACKEND_URL = window.location.hostname === "localhost"
+  ? "http://localhost:4000"
+  : "https://royal-cue-backend.onrender.com"; // 👈 URL Live Render/Railway Backend Kamu
+
 export default function ReservasiPage() {
   const navigate = useNavigate();
   const [success, setSuccess] = useState(false);
@@ -20,8 +25,8 @@ export default function ReservasiPage() {
   // Daftar Pilihan Nomor Meja
   const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja VIP 1", "Meja VIP 2"];
   
-  // JALUR ENDPOINT SINKRON KE ROUTER BACKEND NODE.JS
-  const URL_DATABASE = "http://localhost:4000/api/reservasi";
+  // Endpoint disinkronkan menggunakan BACKEND_URL dinamis
+  const URL_DATABASE = `${BACKEND_URL}/api/reservasi`;
 
   /* ========================================================
       🔥 FUNGSI HITUNG ESTIMASI HARGA LIVE (REAL-TIME)
@@ -36,7 +41,7 @@ export default function ReservasiPage() {
      ======================================================== */
   const handleBooking = async (e) => {
     e.preventDefault();
-    setLoading(true); // 👈 Sudah diperbaiki dari loading(true) menjadi setLoading(true)
+    setLoading(true); 
 
     const idBooking = "RC-" + Math.floor(100000 + Math.random() * 900000);
 
@@ -49,7 +54,7 @@ export default function ReservasiPage() {
       durasiBermain: form.durasi,
       nomorMeja: form.meja,
       statusPemesanan: "Pending", 
-      waktuDibuat: new Date().toISOString() // Menggunakan ISO String untuk kestabilan database
+      waktuDibuat: new Date().toISOString() 
     };
 
     try {
@@ -60,15 +65,16 @@ export default function ReservasiPage() {
       });
 
       if (response.ok) {
-        setLoading(false); // 👈 Sudah diperbaiki
+        setLoading(false); 
         setSuccess(true);
       } else {
         throw new Error("Respon server gagal");
       }
     } catch (error) {
       console.error("Gagal mengirim data:", error);
-      setLoading(false); // 👈 Sudah diperbaiki
-      alert("Gagal terhubung ke server backend kasir. Pastikan server Node.js di folder backend sudah menyala di port 4000!");
+      setLoading(false); 
+      // 👇 Pesan alert disesuaikan agar informatif baik saat local test maupun live prod
+      alert(`Gagal terhubung ke server backend kasir.\n\nJika di hosting, pastikan web service backend Anda di Render/Railway aktif.\nJika di lokal, pastikan server Node.js menyala.`);
     }
   };
 
@@ -145,7 +151,7 @@ export default function ReservasiPage() {
             </div>
           </div>
 
-          {/* 🔥 BOX INFO ESTIMASI HARGA LIVE (Dipasang Tepat Sebelum Tombol Submit) */}
+          {/* 🔥 BOX INFO ESTIMASI HARGA LIVE */}
           <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl flex justify-between items-center my-4">
             <div className="space-y-0.5">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#00ff99] flex items-center gap-1.5">
