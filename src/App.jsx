@@ -6,14 +6,13 @@ import {
 } from "react-router-dom";
 
 /* =========================================
-   PAGES
+   PAGES (Disinkronkan dengan File Asli Anda)
 ========================================= */
 import HomePage from "./pages/HomePage";
 import Reservasi from "./pages/ReservasiPage";
-import LoginPage from "./pages/LoginPage";
+import LoginKasirPage from "./pages/LoginKasirPage"; // 👈 Sesuai struktur folder Anda
+import LoginAdminPage from "./pages/LoginAdminPage"; // 👈 Sesuai struktur folder Anda
 import AdminDashboard from "./pages/AdminDashboard";
-
-// Komponen Pembungkus Utama Baru untuk Kasir
 import DashboardUtamaKasir from "./pages/DashboardUtamaKasir"; 
 
 /* =========================================
@@ -29,7 +28,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function LayoutUtama() {
   const location = useLocation();
 
-  // Memastikan navbar & footer disembunyikan saat masuk halaman login role maupun panel dashboard
+  // Menyembunyikan Navbar & Footer umum di halaman login operasional dan dashboard internal
   const hideLayout =
     location.pathname === "/admin" ||
     location.pathname === "/kasir" ||
@@ -39,7 +38,7 @@ function LayoutUtama() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
 
-      {/* NAVBAR (Hanya muncul di halaman publik / luar) */}
+      {/* NAVBAR (Hanya muncul di halaman publik: Beranda & Reservasi) */}
       {!hideLayout && <Navbar />}
 
       <div className="flex-grow">
@@ -52,20 +51,13 @@ function LayoutUtama() {
           <Route path="/reservasi" element={<Reservasi />} />
 
           {/* =========================
-              LOGIN ROLE BASED (MURNI FRONTEND)
+              LOGIN FORM (MURNI FRONTEND - TANPA PROTECTED ROUTE)
           ========================= */}
-          <Route
-            path="/admin"
-            element={<LoginPage roleLogin="admin" />}
-          />
-
-          <Route
-            path="/kasir"
-            element={<LoginPage roleLogin="kasir" />}
-          />
+          <Route path="/admin" element={<LoginAdminPage />} />
+          <Route path="/kasir" element={<LoginKasirPage />} />
 
           {/* =========================
-              ADMIN DASHBOARD
+              ADMIN DASHBOARD (TERPROTEKSI)
           ========================= */}
           <Route
             path="/admin-dashboard"
@@ -77,7 +69,7 @@ function LayoutUtama() {
           />
 
           {/* =========================
-              DASHBOARD UTAMA KASIR
+              DASHBOARD UTAMA KASIR (TERPROTEKSI)
           ========================= */}
           <Route
             path="/kasir-dashboard"
@@ -91,7 +83,7 @@ function LayoutUtama() {
         </Routes>
       </div>
 
-      {/* FOOTER (Otomatis hilang di halaman login kasir, login admin, dan semua jenis dashboard) */}
+      {/* FOOTER (Otomatis hilang di area kerja kasir & admin) */}
       {!hideLayout && <Footer />}
 
     </div>
