@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaUser, FaPhoneAlt, FaClock, FaDiceD6, FaMoneyBillWave } from "react-icons/fa";
-// 🟢 IMPORT CLIENT SUPABASE YANG SUDAH KAMU BUAT
 import { supabase } from "../supabaseClient";
 
 export default function ReservasiPage() {
   const navigate = useNavigate();
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bookingId, setBookingId] = useState("");
   
   const [form, setForm] = useState({ 
     nama: "", 
@@ -18,72 +18,109 @@ export default function ReservasiPage() {
     meja: "Meja 1"
   });
 
-  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja VIP 1", "Meja VIP 2"];
+  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
 
   const hitungEstimasiHarga = () => {
     const hargaPerJam = form.meja.toLowerCase().includes("vip") ? 80000 : 50000;
     return hargaPerJam * form.durasi;
   };
 
-  // 🔥 FUNGSI RE-INDEX UNTUK MENCARI ID TERKECIL YANG KOSONG (RESET KE 1 JIKA ID 1 DIHAPUS)
-  const hitungIdRapatTerkecil = async () => {
-    const { data: semuaData, error } = await supabase
-      .from("reservasi_billiard")
-      .select("id")
-      .order("id", { ascending: true });
+  // 🔥 CEK APAKAH MEJA SUDAH DIPESAN PADA TANGGAL DAN JAM TERSEBUT
+  const cekKetersediaanMeja = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("reservasi_billiard")
+        .select("*")
+        .eq("nomor_meja", form.meja)
+        .eq("tanggal_main", form.tanggal)
+        .eq("jam_mulai", form.jam)
+        .in("status_pemesanan", ["Pending", "Playing"]);
 
-    if (error) throw error;
-
-    let idKandidat = 1;
-    if (semuaData && semuaData.length > 0) {
-      // Ambil semua angka id yang aktif di database menjadi array murni, misal: [2, 3]
-      const kumpulanIdAktif = semuaData.map((item) => item.id);
+      if (error) throw error;
       
-      // Lakukan looping mencari angka terkecil yang bolong/hilang dari antrean
-      while (kumpulanIdAktif.includes(idKandidat)) {
-        idKandidat++;
-      }
+      return data && data.length > 0 ? false : true;
+    } catch (error) {
+      console.error("Error cek ketersediaan:", error);
+      return true; // Jika error, anggap tersedia
     }
-    return idKandidat;
   };
 
   const handleBooking = async (e) => {
     e.preventDefault();
-    setLoading(true); 
+    
+    // Validasi form
+    if (!form.nama.trim()) {
+      alert("Harap masukkan nama lengkap!");
+      return;
+    }
+    if (!form.nohp.trim()) {
+      alert("Harap masukkan nomor WhatsApp!");
+      return;
+    }
+    
+    setLoading(true);
 
     try {
-      // 1. Jalankan fungsi hitung ID rapat online
-      const idUrutRapat = await hitungIdRapatTerkecil();
+      // 1. Cek ketersediaan meja terlebih dahulu
+      const mejaTersedia = await cekKetersediaanMeja();
+      if (!mejaTersedia) {
+        alert(`⚠️ Meja ${form.meja} sudah dipesan pada tanggal ${form.tanggal} jam ${form.jam}. Silakan pilih meja atau waktu lain.`);
+        setLoading(false);
+        return;
+      }
 
-      const idBooking = "RC-" + Math.floor(100000 + Math.random() * 900000);
-      const totalEstimasi = hitungEstimasiHarga();
+      // 2. Buat ID Booking unik
+      const idBooking = "RC-" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000);
+      
+      // 3. Generate ID numerik (pakai timestamp untuk menghindari konflik)
+      const idNumerik = Date.now();
 
-      // 2. STRUKTUR DATA: Disesuaikan dengan kolom tabel PostgreSQL Supabase-mu
+      // 4. Struktur data yang sesuai dengan tabel di Supabase
       const dataPesanan = {
-        id: idUrutRapat, // ID angka rapat manual (Bukan autoincrement database)
-        idBooking: idBooking,
-        namaPelanggan: form.nama.trim(),
-        nomorWhatsApp: form.nohp,
-        tanggalMain: form.tanggal,
-        jamMulai: form.jam, 
-        durasiBermain: Number(form.durasi),
-        nomorMeja: form.meja,
-        statusPemesanan: "Pending" // Default awal status di kasir
+        id: idNumerik,
+        id_booking: idBooking,
+        nomor_meja: form.meja,
+        nama_pelanggan: form.nama.trim(),
+        status_pemesanan: "Pending",
+        durasi_bermain: Number(form.durasi),
+        tanggal_main: form.tanggal,
+        jam_mulai: form.jam,
+        no_whatsapp: form.nohp,
+        total: 0, // Akan diisi saat start main
+        pesanan_fb: [], // Pesanan makanan & minuman
+        created_at: new Date().toISOString()
       };
 
-      // 3. TEMBAK DATA ONLINE KE AWAN SUPABASE
-      const { error: errorInsert } = await supabase
+      console.log("Menyimpan data reservasi:", dataPesanan);
+
+      // 5. Simpan ke Supabase
+      const { data, error } = await supabase
         .from("reservasi_billiard")
-        .insert([dataPesanan]);
+        .insert([dataPesanan])
+        .select();
 
-      if (errorInsert) throw errorInsert;
+      if (error) throw error;
 
-      setLoading(false); 
+      console.log("Reservasi berhasil disimpan:", data);
+      
+      setBookingId(idBooking);
+      setLoading(false);
       setSuccess(true);
+      
     } catch (error) {
       console.error("Gagal menyimpan data ke Supabase:", error);
       setLoading(false);
-      alert("Terjadi kesalahan sistem: " + error.message);
+      
+      // Menampilkan pesan error yang lebih jelas
+      let pesanError = "Terjadi kesalahan sistem: ";
+      if (error.message.includes("duplicate key")) {
+        pesanError += "ID sudah terpakai, silakan coba lagi.";
+      } else if (error.message.includes("row-level security")) {
+        pesanError += "Masalah keamanan database. Silakan hubungi admin.";
+      } else {
+        pesanError += error.message;
+      }
+      alert(pesanError);
     }
   };
 
@@ -113,6 +150,7 @@ export default function ReservasiPage() {
                 type="text" 
                 placeholder="Masukkan nama Anda..." 
                 required 
+                value={form.nama}
                 className="w-full bg-slate-900/60 border border-slate-800 p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm" 
                 onChange={e => setForm({...form, nama: e.target.value})} 
               />
@@ -125,9 +163,10 @@ export default function ReservasiPage() {
             <div className="relative flex items-center">
               <FaPhoneAlt className="absolute left-4 text-slate-500 text-xs" />
               <input 
-                type="text" 
-                placeholder="Contoh: 081234567xxx" 
+                type="tel" 
+                placeholder="Contoh: 081234567890" 
                 required 
+                value={form.nohp}
                 className="w-full bg-slate-900/60 border border-slate-800 p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm" 
                 onChange={e => setForm({...form, nohp: e.target.value})} 
               />
@@ -218,7 +257,14 @@ export default function ReservasiPage() {
             disabled={loading} 
             className="w-full bg-[#00aa66] hover:bg-[#00cc7a] text-white font-black text-sm py-4 rounded-xl transition-all duration-300 shadow-xl shadow-[#00aa66]/20 hover:shadow-[#00aa66]/40 active:scale-95 cursor-pointer flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
           >
-            {loading ? "Mengirim ke Kasir..." : "Konfirmasi & Kirim Ke Kasir"}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Mengirim ke Kasir...
+              </>
+            ) : (
+              "Konfirmasi & Kirim Ke Kasir"
+            )}
           </button>
         </form>
       </div>
@@ -226,12 +272,18 @@ export default function ReservasiPage() {
       {/* Modal Popup Sukses Booking */}
       {success && (
         <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-6 text-center">
-          <div className="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6">
+          <div className="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6 animate-fade-in">
             <FaCheckCircle className="text-[#00ff99] text-6xl mx-auto drop-shadow-[0_0_15px_rgba(0,255,153,0.3)]" />
             <div className="space-y-2">
               <h3 className="text-2xl font-black text-white">Booking Berhasil!</h3>
               <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                Data Anda telah masuk ke sistem monitor kasir Royal Cue Studio. Silakan sebutkan nama Anda saat tiba di meja kasir.
+                Data Anda telah masuk ke sistem monitor kasir Royal Cue Studio.
+              </p>
+              <p className="text-sm text-[#00ff99] font-mono mt-2">
+                Kode Booking: {bookingId}
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                Silakan sebutkan nama Anda saat tiba di meja kasir.
               </p>
             </div>
             <button 
@@ -243,6 +295,16 @@ export default function ReservasiPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.2s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }

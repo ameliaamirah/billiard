@@ -21,6 +21,7 @@ export default function KasirDashboard() {
 
   // Harga per jam (bisa disesuaikan)
   const HARGA_PER_JAM = 50000;
+  const HARGA_VIP_PER_JAM = 80000;
 
   // 🔄 1. Ambil data dari Supabase
   const fetchData = async () => {
@@ -45,7 +46,11 @@ export default function KasirDashboard() {
       setDaftarMeja(reservasi || []);
       setRiwayatTransaksi(riwayat || []);
       
-      console.log("Data loaded:", { reservasi: reservasi?.length, riwayat: riwayat?.length });
+      console.log("Data loaded:", { 
+        reservasi: reservasi?.length, 
+        riwayat: riwayat?.length,
+        sampleRiwayat: riwayat?.[0] 
+      });
     } catch (error) {
       console.error("Error fetching data:", error);
       alert("Gagal memuat data: " + error.message);
@@ -82,37 +87,48 @@ export default function KasirDashboard() {
     };
   }, []);
 
+  // Fungsi untuk mendapatkan harga per jam berdasarkan nomor meja
+  const getHargaPerJam = (nomorMeja) => {
+    return nomorMeja?.toLowerCase().includes("vip") ? HARGA_VIP_PER_JAM : HARGA_PER_JAM;
+  };
+
   // ⚡ 2. FUNGSI UTAMA: Start & Stop Billing (DIPERBAIKI)
   const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB = 0, durasi, itemFB = []) => {
     try {
+      console.log("ubahStatusMeja dipanggil:", { id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB, durasi, itemFB });
+      
       if (statusBaru === "Selesai") {
         const metode = prompt("Masukkan metode pembayaran (Cash / QRIS / Transfer):", "Cash") || "Cash";
         const jamSelesai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
         const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
         const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
 
+        // 🔥 PASTIKAN DATA TIDAK KOSONG
         const dataStrukBaru = {
-          id_booking: "RC-" + String(id).slice(-5),
-          nomor_meja: nomorMeja,
-          nama_pelanggan: namaPelanggan,
-          durasi: durasi,
+          id_booking: "RC-" + String(id).slice(-8),
+          nomor_meja: nomorMeja || "Meja Tidak Diketahui",
+          nama_pelanggan: namaPelanggan || "Pelanggan Tidak Diketahui",
+          durasi: durasi || 1,
           total_sewa: Number(totalSewa || 0),
           total_fb: Number(totalFB || 0),
           total_akhir: totalAkhirSemua,
           metode_pembayaran: metode.toLowerCase(),
           waktu_selesai: `${tanggalHariIni} ${jamSelesai}`,
-          pesanan_fb: itemFB,
+          pesanan_fb: itemFB || [],
           created_at: new Date().toISOString()
         };
 
-        console.log("Menyimpan transaksi:", dataStrukBaru);
+        console.log("Menyimpan transaksi ke riwayat:", dataStrukBaru);
 
         // Simpan ke riwayat_transaksi
         const { error: insertError } = await supabase
           .from("riwayat_transaksi")
           .insert([dataStrukBaru]);
         
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Error insert ke riwayat:", insertError);
+          throw insertError;
+        }
 
         // Hapus dari reservasi_billiard
         const { error: deleteError } = await supabase
@@ -120,26 +136,32 @@ export default function KasirDashboard() {
           .delete()
           .eq("id", id);
         
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error("Error delete dari reservasi:", deleteError);
+          throw deleteError;
+        }
 
+        console.log("Transaksi berhasil disimpan, ID meja", id, "telah dihapus");
+        
         setModalStruk({ isOpen: true, data: { ...dataStrukBaru, idBooking: dataStrukBaru.id_booking } });
         await fetchData();
 
       } else if (statusBaru === "Playing") {
-        // 🔥 PERBAIKAN: Hitung total sewa berdasarkan durasi dan simpan ke database
-        const totalBiayaSewa = durasi * HARGA_PER_JAM;
-        
-        // Update status menjadi Playing dan simpan total sewa
+        // Update status menjadi Playing
         const { error: updateError } = await supabase
           .from("reservasi_billiard")
           .update({ 
             status_pemesanan: statusBaru,
-            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }),
-            total: totalBiayaSewa  // ← SIMPAN TOTAL SEWA KE DATABASE
+            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })
           })
           .eq("id", id);
         
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("Error update status:", updateError);
+          throw updateError;
+        }
+        
+        console.log("Status meja", id, "berhasil diubah menjadi Playing");
         await fetchData();
       }
     } catch (error) {
@@ -174,7 +196,7 @@ export default function KasirDashboard() {
         .filter(m => m.status_pemesanan === "Playing")
         .map(m => m.nomor_meja?.toLowerCase());
       
-      const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
+      const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
       const mejaTersedia = daftarSemuaMeja.filter(noMeja => !semuaNomorMejaTerpakai.includes(noMeja.toLowerCase()));
 
       if (mejaTersedia.length === 0) {
@@ -425,11 +447,11 @@ export default function KasirDashboard() {
                   ) : (
                     riwayatTerfilter.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-800/20 transition-colors duration-150">
-                        <td className="p-4 text-xs font-mono text-slate-400">{item.waktu_selesai}</td>
-                        <td className="p-4 font-black text-emerald-400">{item.nomor_meja}</td>
-                        <td className="p-4 font-bold text-white">{item.nama_pelanggan}</td>
+                        <td className="p-4 text-xs font-mono text-slate-400">{item.waktu_selesai || "-"}</td>
+                        <td className="p-4 font-black text-emerald-400">{item.nomor_meja || "-"}</td>
+                        <td className="p-4 font-bold text-white">{item.nama_pelanggan || "-"}</td>
                         <td className="p-4 text-xs text-slate-300">
-                          {item.durasi} Jam <span className="text-slate-500 mx-1">|</span> 
+                          {item.durasi || 1} Jam <span className="text-slate-500 mx-1">|</span> 
                           Rp {(item.total_sewa || 0).toLocaleString("id-ID")}
                         </td>
                         <td className="p-4 text-xs text-amber-400 font-semibold">
@@ -457,10 +479,11 @@ export default function KasirDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {mejaTerfilter.map((meja) => {
               const statusSekarang = meja.status_pemesanan || "Pending";
-              // 🔥 PERBAIKAN: Hitung total makanan
+              // Hitung total makanan
               const totalBelanjaFB = (meja.pesanan_fb || []).reduce((acc, curr) => acc + ((curr.harga || 0) * (curr.qty || 1)), 0);
-              // 🔥 PERBAIKAN: Total tagihan = biaya sewa (dari database) + biaya makanan
-              const totalBiayaSewa = meja.total || 0;
+              // Hitung total sewa berdasarkan durasi dan harga per jam
+              const hargaPerJamMeja = getHargaPerJam(meja.nomor_meja);
+              const totalBiayaSewa = (meja.durasi_bermain || 1) * hargaPerJamMeja;
               const totalTagihanKeseluruhan = totalBiayaSewa + totalBelanjaFB;
               const isPlaying = statusSekarang === "Playing";
 
@@ -478,7 +501,7 @@ export default function KasirDashboard() {
                   <div className="flex justify-between items-start mb-5">
                     <div>
                       <h3 className="font-black text-xl text-white tracking-wide flex items-center gap-2">
-                        🎱 {meja.nomor_meja}
+                        🎱 {meja.nomor_meja || "Meja ?"}
                       </h3>
                       <p className="text-slate-500 text-[10px] font-mono mt-1 bg-slate-950/60 w-fit px-1.5 py-0.5 rounded border border-slate-800/40">
                         ID: {meja.id_booking || "RC-" + String(meja.id).slice(-5)}
@@ -512,10 +535,10 @@ export default function KasirDashboard() {
                   </div>
                   
                   <div className="space-y-2.5 text-xs border-y border-slate-800/60 py-4 my-4 font-medium text-slate-300">
-                    <div className="flex justify-between"><span className="text-slate-400">👤 Pelanggan:</span> <span className="font-bold text-white text-sm">{meja.nama_pelanggan}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">⏱️ Durasi Bermain:</span> <span className="font-semibold text-slate-100">{meja.durasi_bermain} Jam</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">👤 Pelanggan:</span> <span className="font-bold text-white text-sm">{meja.nama_pelanggan || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">⏱️ Durasi Bermain:</span> <span className="font-semibold text-slate-100">{meja.durasi_bermain || 1} Jam</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">🕒 Jam Mulai:</span> <span className="font-mono text-emerald-400 font-semibold">{meja.jam_mulai || "-"}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">💰 Biaya Sewa:</span> <span className="font-semibold text-emerald-400">Rp {(totalBiayaSewa || 0).toLocaleString("id-ID")}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">💰 Biaya Sewa:</span> <span className="font-semibold text-emerald-400">Rp {totalBiayaSewa.toLocaleString("id-ID")}</span></div>
                     {totalBelanjaFB > 0 && (
                       <div className="text-[11px] text-amber-400 bg-amber-500/5 p-2 rounded-xl border border-amber-500/10 flex justify-between items-center mt-2">
                         <span>🛒 Pesanan Kantin:</span>
@@ -534,8 +557,14 @@ export default function KasirDashboard() {
                       <>
                         <button 
                           onClick={() => {
-                            // 🔥 Hitung total sewa berdasarkan durasi
-                            const totalSewa = (meja.durasi_bermain || 1) * HARGA_PER_JAM;
+                            const hargaPerJamMejaBtn = getHargaPerJam(meja.nomor_meja);
+                            const totalSewa = (meja.durasi_bermain || 1) * hargaPerJamMejaBtn;
+                            console.log("Start Main - Data meja:", {
+                              id: meja.id,
+                              nama: meja.nama_pelanggan,
+                              meja: meja.nomor_meja,
+                              totalSewa: totalSewa
+                            });
                             ubahStatusMeja(
                               meja.id, 
                               "Playing", 
@@ -562,16 +591,25 @@ export default function KasirDashboard() {
                         <button disabled className="bg-slate-950/40 text-slate-700 border border-slate-900 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-not-allowed flex-1">▶️ Start Main</button>
                         <button 
                           disabled={!isPlaying} 
-                          onClick={() => ubahStatusMeja(
-                            meja.id, 
-                            "Selesai", 
-                            meja.nama_pelanggan, 
-                            meja.nomor_meja, 
-                            totalBiayaSewa, 
-                            totalBelanjaFB, 
-                            meja.durasi_bermain, 
-                            meja.pesanan_fb || []
-                          )} 
+                          onClick={() => {
+                            console.log("Stop & Bayar - Data meja:", {
+                              id: meja.id,
+                              nama: meja.nama_pelanggan,
+                              meja: meja.nomor_meja,
+                              totalBiayaSewa: totalBiayaSewa,
+                              totalBelanjaFB: totalBelanjaFB
+                            });
+                            ubahStatusMeja(
+                              meja.id, 
+                              "Selesai", 
+                              meja.nama_pelanggan, 
+                              meja.nomor_meja, 
+                              totalBiayaSewa, 
+                              totalBelanjaFB, 
+                              meja.durasi_bermain, 
+                              meja.pesanan_fb || []
+                            );
+                          }} 
                           className={`flex-1 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-150 ${isPlaying ? "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white cursor-pointer shadow-lg shadow-rose-950/20 active:scale-95" : "bg-slate-950/40 text-slate-700 border border-slate-900 cursor-not-allowed"}`}
                         >
                           ⏹️ Stop & Bayar
