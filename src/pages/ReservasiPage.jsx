@@ -28,20 +28,6 @@ export default function ReservasiPage() {
     return getHargaPerJam(form.meja) * form.durasi;
   };
 
-  const cekKetersediaanMeja = async () => {
-    // PERBAIKAN: Gunakan nama kolom yang benar (camelCase)
-    const { data, error } = await supabase
-      .from("reservasi_billiard")
-      .select("*")
-      .eq("nomorMeja", form.meja)  // ← Ganti dari nomor_meja ke nomorMeja
-      .eq("tanggalMain", form.tanggal)  // ← Ganti dari tanggal_main ke tanggalMain
-      .eq("jamMulai", form.jam)  // ← Ganti dari jam_mulai ke jamMulai
-      .in("statusPemesanan", ["Pending", "Playing"]);  // ← Ganti dari status_pemesanan ke statusPemesanan
-
-    if (error) throw error;
-    return data.length === 0;
-  };
-
   const handleBooking = async (e) => {
     e.preventDefault();
     
@@ -51,41 +37,39 @@ export default function ReservasiPage() {
     setLoading(true);
 
     try {
-      const tersedia = await cekKetersediaanMeja();
-      if (!tersedia) {
-        alert(`⚠️ Meja ${form.meja} sudah dipesan pada jam tersebut!`);
-        setLoading(false);
-        return;
-      }
-
       const idBooking = "RC-" + Date.now().toString().slice(-8);
       const idNumerik = Date.now();
 
-      // PERBAIKAN: Gunakan nama kolom yang benar (camelCase)
       const dataPesanan = {
         id: idNumerik,
-        idBooking: idBooking,  // ← Ganti dari id_booking ke idBooking
-        nomorMeja: form.meja,  // ← Ganti dari nomor_meja ke nomorMeja
-        namaPelanggan: form.nama.trim(),  // ← Ganti dari nama_pelanggan ke namaPelanggan
-        statusPemesanan: "Pending",  // ← Ganti dari status_pemesanan ke statusPemesanan
-        durasiBermain: Number(form.durasi),  // ← Ganti dari durasi_bermain ke durasiBermain
-        tanggalMain: form.tanggal,  // ← Ganti dari tanggal_main ke tanggalMain
-        jamMulai: form.jam,  // ← Ganti dari jam_mulai ke jamMulai
-        noWhatsapp: form.nohp,  // ← Ganti dari no_whatsapp ke noWhatsapp
-        pesananFB: [],  // ← Ganti dari pesanan_fb ke pesananFB
-        createdAt: new Date().toISOString()  // ← Ganti dari created_at ke createdAt
+        idBooking: idBooking,
+        nomorMeja: form.meja,
+        namaPelanggan: form.nama.trim(),
+        statusPemesanan: "Pending",
+        durasiBermain: Number(form.durasi),
+        tanggalMain: form.tanggal,
+        jamMulai: form.jam,
+        noWhatsapp: form.nohp,
+        pesananFB: [],
+        createdAt: new Date().toISOString()
       };
 
-      console.log("Menyimpan data:", dataPesanan);
+      console.log("Menyimpan data reservasi:", dataPesanan);
 
-      const { error } = await supabase.from("reservasi_billiard").insert([dataPesanan]);
+      const { error, data } = await supabase
+        .from("reservasi_billiard")
+        .insert([dataPesanan])
+        .select();
+
       if (error) throw error;
+
+      console.log("Reservasi berhasil:", data);
 
       setBookingId(idBooking);
       setSuccess(true);
       
     } catch (error) {
-      console.error(error);
+      console.error("Error:", error);
       alert("Gagal booking: " + error.message);
     } finally {
       setLoading(false);
@@ -104,20 +88,20 @@ export default function ReservasiPage() {
           <div>
             <label className="text-[11px] font-bold text-[#00ff99]">NAMA LENGKAP</label>
             <input type="text" placeholder="Nama Anda" required value={form.nama}
-              className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99]"
+              className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99] outline-none"
               onChange={e => setForm({...form, nama: e.target.value})} />
           </div>
 
           <div>
             <label className="text-[11px] font-bold text-[#00ff99]">NO. WHATSAPP</label>
             <input type="tel" placeholder="081234567890" required value={form.nohp}
-              className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99]"
+              className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99] outline-none"
               onChange={e => setForm({...form, nohp: e.target.value})} />
           </div>
 
           <div>
             <label className="text-[11px] font-bold text-[#00ff99]">PILIH MEJA</label>
-            <select value={form.meja} className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white"
+            <select value={form.meja} className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white outline-none cursor-pointer"
               onChange={e => setForm({...form, meja: e.target.value})}>
               {daftarMeja.map(m => <option key={m}>{m}</option>)}
             </select>
@@ -127,13 +111,13 @@ export default function ReservasiPage() {
             <div>
               <label className="text-[11px] font-bold text-[#00ff99]">TANGGAL</label>
               <input type="date" value={form.tanggal} required
-                className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white"
+                className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99] outline-none"
                 onChange={e => setForm({...form, tanggal: e.target.value})} />
             </div>
             <div>
               <label className="text-[11px] font-bold text-[#00ff99]">JAM MULAI</label>
               <input type="time" value={form.jam} required
-                className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white"
+                className="w-full bg-slate-900/60 border border-slate-800 p-4 rounded-xl text-white focus:border-[#00ff99] outline-none"
                 onChange={e => setForm({...form, jam: e.target.value})} />
             </div>
           </div>
@@ -142,10 +126,14 @@ export default function ReservasiPage() {
             <label className="text-[11px] font-bold text-[#00ff99]">DURASI (JAM)</label>
             <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
               <button type="button" onClick={() => setForm({...form, durasi: Math.max(1, form.durasi - 1)})}
-                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer">-</button>
+                className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-lg text-xl font-bold cursor-pointer transition">
+                -
+              </button>
               <span className="font-bold"><FaClock className="inline mr-2 text-[#00ff99]" />{form.durasi} Jam</span>
               <button type="button" onClick={() => setForm({...form, durasi: form.durasi + 1})}
-                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer">+</button>
+                className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-lg text-xl font-bold cursor-pointer transition">
+                +
+              </button>
             </div>
           </div>
 
