@@ -51,7 +51,7 @@ const Navbar = () => {
     }`}>
       <div className="max-w-6xl mx-auto px-4 sm:px-5 flex justify-between items-center">
         
-        {/* LOGO BRAND (DESKTOP & MOBILE RESPONSIVE) */}
+        {/* LOGO BRAND */}
         <div 
           className="flex items-center cursor-pointer select-none pb-0.5 border-b-[0.5px] border-[#00ff99]/10 hover:border-[#00ff99]/40 transition-colors duration-300" 
           onClick={() => handleDirectNavigate("/")}
@@ -86,11 +86,13 @@ const Navbar = () => {
       {/* BACKGROUND BLUR OVERLAY */}
       {menuOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[85] md:hidden" onClick={() => setMenuOpen(false)} />}
 
-      {/* 📱 MENU MOBILE */} 
+      {/* 📱 MENU MOBILE (SIDEBAR FIXED POSITION) */} 
       <div className={`md:hidden fixed top-0 left-0 w-[260px] sm:w-[300px] h-screen bg-[#070a13] border-r border-slate-800/60 text-white transition-transform duration-500 z-[90] rounded-tr-[24px] rounded-br-[24px] shadow-2xl flex flex-col justify-between ${
         menuOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
-        <div className="flex flex-col pt-16 px-6 gap-5 overflow-y-auto flex-grow">
+        
+        {/* AREA ATAS: LOGO & LINK NAVIGASI */}
+        <div className="flex flex-col pt-16 px-6 gap-5 overflow-y-auto">
           
           {/* LOGO BRAND (MOBILE SIDEBAR) */}
           <div className="flex items-center pb-3 border-b-[0.5px] border-slate-800/40 mb-1">
@@ -113,10 +115,13 @@ const Navbar = () => {
           ))}
         </div>
 
-        {/* FOOTER MENU MOBILE */}
-        <div className="px-6 pb-6 pt-3 border-t border-slate-800/40">
-          <p className="text-[9px] tracking-widest text-slate-500 font-bold uppercase">© 2026 ROYAL CUE STUDIO</p>
+        {/* AREA BAWAH: TEKS FOOTER DIPAKSA MENETAP DI BAWAH LAYAR HP */}
+        <div className="px-6 pb-8 pt-4 border-t border-slate-800/40 bg-[#070a13]">
+          <p className="text-[10px] tracking-widest text-slate-500 font-bold uppercase">
+            © 2026 ROYAL CUE STUDIO
+          </p>
         </div>
+
       </div>
     </header>
   );
