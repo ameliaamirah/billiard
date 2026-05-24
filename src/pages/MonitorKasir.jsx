@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaClock, FaCalendarAlt, FaWhatsapp, FaUser, FaCheck, FaTimes } from "react-icons/fa";
+import { FaClock, FaCalendarAlt, FaWhatsapp, FaUser, FaCheck, FaTimes, FaExchangeAlt } from "react-icons/fa";
 
 export default function MonitorKasir() {
   const [pesanan, setPesanan] = useState([]);
@@ -47,14 +47,12 @@ export default function MonitorKasir() {
   // ⚡ 3. FUNGSI MENGUBAH STATUS PESANAN (Setujui / Otomatis Hapus jika Ditolak)
   const ubahStatus = (id, statusBaru, namaPelanggan) => {
     if (statusBaru === "Ditolak") {
-      // 🧹 Jika ditolak (salah input/ghosting), langsung otomatis terhapus dari system lokal
       if (window.confirm(`Apakah Anda yakin ingin menolak & menghapus pesanan atas nama "${namaPelanggan}"?`)) {
         const dataSisa = pesanan.filter((item) => item.id !== id);
         setPesanan(dataSisa);
         localStorage.setItem("reservasi_billiard", JSON.stringify(dataSisa));
       }
     } else {
-      // 🟢 Jika disetujui (Status boking masuk ke kontrol meja)
       const dataDiupdate = pesanan.map((item) => {
         if (item.id === id) {
           return { 
@@ -72,51 +70,139 @@ export default function MonitorKasir() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-8 pt-24">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* HEADER */}
-        <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-white">
-              MONITOR KASIR <span className="text-[#00ff99]">ROYAL CUE</span>
-            </h1>
-            <p className="text-xs text-slate-400">Sistem Pemantauan Reservasi Meja Biliar Real-time</p>
-          </div>
-          <div className="flex items-center gap-2 bg-[#00ff99]/10 border border-[#00ff99]/20 px-4 py-2 rounded-lg">
-            <div className="w-2 h-2 bg-[#00ff99] rounded-full" />
-            <span className="text-xs font-bold text-[#00ff99] uppercase tracking-wider">Local Storage System Active</span>
-          </div>
+    <div className="max-w-7xl mx-auto space-y-6">
+      
+      {/* 📱 HEADER PANEL MONITOR */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-black tracking-tight text-white">
+            MONITOR RESERVASI <span className="text-[#00ff99]">ROYAL CUE</span>
+          </h1>
+          <p className="text-xs text-slate-400">Sistem Pemantauan Pemesanan Masuk Real-time</p>
         </div>
+        <div className="flex items-center gap-2 bg-[#00ff99]/10 border border-[#00ff99]/20 px-3 py-1.5 rounded-xl">
+          <div className="w-1.5 h-1.5 bg-[#00ff99] rounded-full animate-pulse" />
+          <span className="text-[10px] font-black text-[#00ff99] uppercase tracking-wider">Sync Local Active</span>
+        </div>
+      </div>
 
-        {/* TABEL DATA */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden backdrop-blur-md">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-400">
-                <th className="p-4">ID Booking</th>
-                <th className="p-4">Pelanggan</th>
-                <th className="p-4">Detail Main</th>
-                <th className="p-4">Meja / Status Meja</th>
-                <th className="p-4">Status Pesanan</th>
-                <th className="p-4 text-center">Aksi Kasir</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 text-sm">
-              {pesanan.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="p-10 text-center text-slate-500 font-medium">
-                    Belum ada data reservasi masuk hari ini.
-                  </td>
+      {/* 📳 KONDISI JIKA DATA KOSONG (BERLAKU DI SEMUA LAYAR) */}
+      {pesanan.length === 0 ? (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 font-medium">
+          Belum ada data reservasi masuk dari pelanggan hari ini.
+        </div>
+      ) : (
+        <>
+          {/* ==========================================================
+              1. TAMPILAN KHUSUS HP / MOBILE (CARD STACK MODE)
+             ========================================================== */}
+          <div className="block md:hidden space-y-4">
+            {pesanan.map((item) => {
+              const sudahSelesaiMain = item.statusPemesanan === "Disetujui" && 
+                cekApakahSelesai(item.tanggalMain, item.jamMulai, item.durasiBermain);
+
+              return (
+                <div 
+                  key={item.id} 
+                  className={`bg-slate-900 border rounded-2xl p-4 space-y-4 transition-all ${
+                    item.statusPemesanan === "Disetujui" ? "border-emerald-500/20" : "border-slate-800"
+                  }`}
+                >
+                  {/* Atas Kartu: ID & Status */}
+                  <div className="flex justify-between items-center border-b border-slate-800/60 pb-2.5">
+                    <span className="font-mono text-xs font-bold text-slate-400">
+                      {item.idBooking || "RC-" + String(item.id).slice(-5)}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                      item.statusPemesanan === "Disetujui" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                      item.statusPemesanan === "Ditolak" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
+                      "bg-amber-500/10 text-amber-400 border border-amber-400/20"
+                    }`}>
+                      {item.statusPemesanan === "Pending" ? "Menunggu" : item.statusPemesanan}
+                    </span>
+                  </div>
+
+                  {/* Tengah Kartu: Info Profil Pelanggan & Jadwal */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-slate-950 rounded-full flex items-center justify-center border border-slate-800">
+                        <FaUser className="text-slate-400 text-xs" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-white">{item.namaPelanggan}</h4>
+                        <a href={`https://wa.me/${item.nomorWhatsApp}`} target="_blank" rel="noreferrer" className="text-[11px] text-[#00ff99] flex items-center gap-1 hover:underline">
+                          <FaWhatsapp /> {item.nomorWhatsApp}
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/40">
+                      <div className="space-y-0.5">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Jadwal Main</p>
+                        <p className="text-slate-300 font-medium flex items-center gap-1"><FaCalendarAlt size={10}/> {item.tanggalMain}</p>
+                        <p className="text-slate-300 font-medium flex items-center gap-1"><FaClock size={10}/> {item.jamMulai} ({item.durasiBermain} Jam)</p>
+                      </div>
+                      <div className="space-y-0.5 flex flex-col justify-between items-end">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Alokasi Meja</p>
+                        <span className="bg-slate-800 px-2 py-0.5 rounded text-xs font-black text-white border border-slate-700">
+                          {item.nomorMeja}
+                        </span>
+                        {sudahSelesaiMain ? (
+                          <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">🛑 Selesai</span>
+                        ) : item.statusPemesanan === "Disetujui" ? (
+                          <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[8px] px-1.5 py-0.5 rounded font-black uppercase animate-pulse">🎱 Bermain</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bawah Kartu: Tombol Aksi Sentuh Jari */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => ubahStatus(item.id, "Disetujui", item.namaPelanggan)}
+                      disabled={item.statusPemesanan === "Disetujui"}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <FaCheck size={10} /> Setujui
+                    </button>
+                    <button
+                      onClick={() => ubahStatus(item.id, "Ditolak", item.namaPelanggan)}
+                      disabled={item.statusPemesanan === "Ditolak"}
+                      className="flex-1 py-2 bg-rose-600/20 hover:bg-rose-600 border border-rose-500/30 text-rose-400 hover:text-white disabled:opacity-20 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <FaTimes size={10} /> Tolak / Hapus
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ==========================================================
+              2. TAMPILAN KHUSUS LAPTOP / DESKTOP (TABLE GRID PREVIEW)
+             ========================================================== */}
+          <div className="hidden md:block bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-md">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-900 border-b border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  <th className="p-4">ID Booking</th>
+                  <th className="p-4">Pelanggan</th>
+                  <th className="p-4">Detail Main</th>
+                  <th className="p-4">Meja / Status Meja</th>
+                  <th className="p-4">Status Pesanan</th>
+                  <th className="p-4 text-center">Aksi Kasir</th>
                 </tr>
-              ) : (
-                pesanan.map((item) => {
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-sm">
+                {pesanan.map((item) => {
                   const sudahSelesaiMain = item.statusPemesanan === "Disetujui" && 
                     cekApakahSelesai(item.tanggalMain, item.jamMulai, item.durasiBermain);
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-900/30 transition-colors">
-                      <td className="p-4 font-mono font-bold text-slate-400">{item.idBooking || "RC-" + String(item.id).slice(-5)}</td>
+                      <td className="p-4 font-mono font-bold text-slate-400">
+                        {item.idBooking || "RC-" + String(item.id).slice(-5)}
+                      </td>
                       <td className="p-4">
                         <div className="font-bold text-white flex items-center gap-2">
                           <FaUser className="text-slate-500 text-xs" /> {item.namaPelanggan}
@@ -160,7 +246,6 @@ export default function MonitorKasir() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-center gap-2">
-                          {/* Tombol Setujui (✔) */}
                           <button 
                             onClick={() => ubahStatus(item.id, "Disetujui", item.namaPelanggan)} 
                             disabled={item.statusPemesanan === "Disetujui"} 
@@ -169,8 +254,6 @@ export default function MonitorKasir() {
                           >
                             <FaCheck size={12} />
                           </button>
-                          
-                          {/* Tombol Tolak/Hapus (✖) */}
                           <button 
                             onClick={() => ubahStatus(item.id, "Ditolak", item.namaPelanggan)} 
                             disabled={item.statusPemesanan === "Ditolak"} 
@@ -183,13 +266,13 @@ export default function MonitorKasir() {
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
-      </div>
     </div>
   );
 }
