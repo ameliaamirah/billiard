@@ -6,12 +6,12 @@ import {
 } from "react-router-dom";
 
 /* =========================================
-   PAGES (Disinkronkan dengan File Asli Anda)
+   PAGES
 ========================================= */
 import HomePage from "./pages/HomePage";
 import Reservasi from "./pages/ReservasiPage";
-import LoginKasirPage from "./pages/LoginKasirPage"; // 👈 Sesuai struktur folder Anda
-import LoginAdminPage from "./pages/LoginAdminPage"; // 👈 Sesuai struktur folder Anda
+import LoginKasirPage from "./pages/LoginKasirPage";
+import LoginAdminPage from "./pages/LoginAdminPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import DashboardUtamaKasir from "./pages/DashboardUtamaKasir"; 
 
@@ -28,8 +28,16 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function LayoutUtama() {
   const location = useLocation();
 
-  // Menyembunyikan Navbar & Footer umum di halaman login operasional dan dashboard internal
-  const hideLayout =
+  // 1. Sembunyikan Navbar di halaman login & dashboard internal saja (Di Beranda TETAP MUNCUL)
+  const hideNavbar =
+    location.pathname === "/admin" ||
+    location.pathname === "/kasir" ||
+    location.pathname === "/admin-dashboard" ||
+    location.pathname === "/kasir-dashboard";
+
+  // 2. Sembunyikan Footer di halaman login, dashboard, DAN HALAMAN BERANDA ("/")
+  const hideFooter =
+    location.pathname === "/" || 
     location.pathname === "/admin" ||
     location.pathname === "/kasir" ||
     location.pathname === "/admin-dashboard" ||
@@ -38,8 +46,8 @@ function LayoutUtama() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
 
-      {/* NAVBAR (Hanya muncul di halaman publik: Beranda & Reservasi) */}
-      {!hideLayout && <Navbar />}
+      {/* NAVBAR */}
+      {!hideNavbar && <Navbar />}
 
       <div className="flex-grow">
         <Routes>
@@ -51,13 +59,13 @@ function LayoutUtama() {
           <Route path="/reservasi" element={<Reservasi />} />
 
           {/* =========================
-              LOGIN FORM (MURNI FRONTEND - TANPA PROTECTED ROUTE)
+              LOGIN FORM (MURNI FRONTEND)
           ========================= */}
           <Route path="/admin" element={<LoginAdminPage />} />
           <Route path="/kasir" element={<LoginKasirPage />} />
 
           {/* =========================
-              ADMIN DASHBOARD (TERPROTEKSI)
+              ADMIN DASHBOARD
           ========================= */}
           <Route
             path="/admin-dashboard"
@@ -69,7 +77,7 @@ function LayoutUtama() {
           />
 
           {/* =========================
-              DASHBOARD UTAMA KASIR (TERPROTEKSI)
+              DASHBOARD UTAMA KASIR
           ========================= */}
           <Route
             path="/kasir-dashboard"
@@ -83,8 +91,8 @@ function LayoutUtama() {
         </Routes>
       </div>
 
-      {/* FOOTER (Otomatis hilang di area kerja kasir & admin) */}
-      {!hideLayout && <Footer />}
+      {/* FOOTER (Otomatis hilang di Beranda, Login, dan area kerja Dashboard) */}
+      {!hideFooter && <Footer />}
 
     </div>
   );
