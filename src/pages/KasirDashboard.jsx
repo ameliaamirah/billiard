@@ -19,6 +19,9 @@ export default function KasirDashboard() {
   // 🔒 STATE UNTUK MODAL REPORT CLOSING SHIFT
   const [modalClosing, setModalClosing] = useState({ isOpen: false, reportData: null });
 
+  // Harga per jam (bisa disesuaikan)
+  const HARGA_PER_JAM = 50000;
+
   // 🔄 1. Ambil data dari Supabase
   const fetchData = async () => {
     try {
@@ -41,6 +44,8 @@ export default function KasirDashboard() {
       
       setDaftarMeja(reservasi || []);
       setRiwayatTransaksi(riwayat || []);
+      
+      console.log("Data loaded:", { reservasi: reservasi?.length, riwayat: riwayat?.length });
     } catch (error) {
       console.error("Error fetching data:", error);
       alert("Gagal memuat data: " + error.message);
@@ -77,7 +82,7 @@ export default function KasirDashboard() {
     };
   }, []);
 
-  // ⚡ 2. FUNGSI UTAMA: Start & Stop Billing
+  // ⚡ 2. FUNGSI UTAMA: Start & Stop Billing (DIPERBAIKI)
   const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB = 0, durasi, itemFB = []) => {
     try {
       if (statusBaru === "Selesai") {
@@ -86,9 +91,6 @@ export default function KasirDashboard() {
         const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
         const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
 
-        // Cari data meja yang akan diselesaikan
-        const mejaYangAkanDiselesaikan = daftarMeja.find(m => m.id === id);
-        
         const dataStrukBaru = {
           id_booking: "RC-" + String(id).slice(-5),
           nomor_meja: nomorMeja,
@@ -97,11 +99,13 @@ export default function KasirDashboard() {
           total_sewa: Number(totalSewa || 0),
           total_fb: Number(totalFB || 0),
           total_akhir: totalAkhirSemua,
-          metode_pembayaran: metode,
+          metode_pembayaran: metode.toLowerCase(),
           waktu_selesai: `${tanggalHariIni} ${jamSelesai}`,
           pesanan_fb: itemFB,
           created_at: new Date().toISOString()
         };
+
+        console.log("Menyimpan transaksi:", dataStrukBaru);
 
         // Simpan ke riwayat_transaksi
         const { error: insertError } = await supabase
@@ -121,13 +125,17 @@ export default function KasirDashboard() {
         setModalStruk({ isOpen: true, data: { ...dataStrukBaru, idBooking: dataStrukBaru.id_booking } });
         await fetchData();
 
-      } else {
-        // Update status menjadi Playing
+      } else if (statusBaru === "Playing") {
+        // 🔥 PERBAIKAN: Hitung total sewa berdasarkan durasi dan simpan ke database
+        const totalBiayaSewa = durasi * HARGA_PER_JAM;
+        
+        // Update status menjadi Playing dan simpan total sewa
         const { error: updateError } = await supabase
           .from("reservasi_billiard")
           .update({ 
             status_pemesanan: statusBaru,
-            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })
+            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }),
+            total: totalBiayaSewa  // ← SIMPAN TOTAL SEWA KE DATABASE
           })
           .eq("id", id);
         
@@ -215,10 +223,14 @@ export default function KasirDashboard() {
     riwayatTransaksi.forEach((item) => {
       totalSewaMeja += item.total_sewa || 0;
       totalKantin += item.total_fb || 0;
-      if ((item.metode_pembayaran || "").toLowerCase() === "cash" || (item.metode_pembayaran || "").toLowerCase() === "tunai") {
-        totalTunai += item.total_akhir || 0;
+      
+      const metode = (item.metode_pembayaran || "").toLowerCase();
+      const totalAkhir = item.total_akhir || 0;
+      
+      if (metode === "cash" || metode === "tunai") {
+        totalTunai += totalAkhir;
       } else {
-        totalNonTunai += item.total_akhir || 0;
+        totalNonTunai += totalAkhir;
       }
     });
 
@@ -283,13 +295,14 @@ export default function KasirDashboard() {
       
       if (error) throw error;
       await fetchData();
+      alert("✅ Pesanan berhasil disimpan");
     } catch (error) {
       console.error("Error saving order:", error);
       alert("Gagal menyimpan pesanan: " + error.message);
     }
   };
 
-  // Logika Filter (perhatikan perubahan nama field)
+  // Logika Filter
   const mejaTerfilter = daftarMeja.filter((meja) => {
     const statusPilihan = meja.status_pemesanan || "Pending";
     const cocokFilter = filterAktif === "Semua" ? true : 
@@ -304,7 +317,9 @@ export default function KasirDashboard() {
     (item.nomor_meja || "").toLowerCase().includes(cariNama.toLowerCase())
   );
   
-  const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + (curr.total_akhir || 0), 0);
+  const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => {
+    return acc + (curr.total_akhir || 0);
+  }, 0);
 
   if (loading && daftarMeja.length === 0) {
     return (
@@ -413,9 +428,16 @@ export default function KasirDashboard() {
                         <td className="p-4 text-xs font-mono text-slate-400">{item.waktu_selesai}</td>
                         <td className="p-4 font-black text-emerald-400">{item.nomor_meja}</td>
                         <td className="p-4 font-bold text-white">{item.nama_pelanggan}</td>
-                        <td className="p-4 text-xs text-slate-300">{item.durasi} Jam <span className="text-slate-500 mx-1">|</span> Rp {(item.total_sewa || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-4 text-xs text-amber-400 font-semibold">Rp {(item.total_fb || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-4 font-mono font-bold text-emerald-400">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-4 text-xs text-slate-300">
+                          {item.durasi} Jam <span className="text-slate-500 mx-1">|</span> 
+                          Rp {(item.total_sewa || 0).toLocaleString("id-ID")}
+                        </td>
+                        <td className="p-4 text-xs text-amber-400 font-semibold">
+                          Rp {(item.total_fb || 0).toLocaleString("id-ID")}
+                        </td>
+                        <td className="p-4 font-mono font-bold text-emerald-400">
+                          Rp {(item.total_akhir || 0).toLocaleString("id-ID")}
+                        </td>
                         <td className="p-4 text-center">
                           <button 
                             onClick={() => setModalStruk({ isOpen: true, data: { ...item, idBooking: item.id_booking } })} 
@@ -435,8 +457,11 @@ export default function KasirDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {mejaTerfilter.map((meja) => {
               const statusSekarang = meja.status_pemesanan || "Pending";
-              const totalBelanjaFB = (meja.pesanan_fb || []).reduce((acc, curr) => acc + (curr.harga * (curr.qty || 1)), 0);
-              const totalTagihanKeseluruhan = Number(meja.total || 0) + totalBelanjaFB;
+              // 🔥 PERBAIKAN: Hitung total makanan
+              const totalBelanjaFB = (meja.pesanan_fb || []).reduce((acc, curr) => acc + ((curr.harga || 0) * (curr.qty || 1)), 0);
+              // 🔥 PERBAIKAN: Total tagihan = biaya sewa (dari database) + biaya makanan
+              const totalBiayaSewa = meja.total || 0;
+              const totalTagihanKeseluruhan = totalBiayaSewa + totalBelanjaFB;
               const isPlaying = statusSekarang === "Playing";
 
               return (
@@ -490,6 +515,7 @@ export default function KasirDashboard() {
                     <div className="flex justify-between"><span className="text-slate-400">👤 Pelanggan:</span> <span className="font-bold text-white text-sm">{meja.nama_pelanggan}</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">⏱️ Durasi Bermain:</span> <span className="font-semibold text-slate-100">{meja.durasi_bermain} Jam</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">🕒 Jam Mulai:</span> <span className="font-mono text-emerald-400 font-semibold">{meja.jam_mulai || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">💰 Biaya Sewa:</span> <span className="font-semibold text-emerald-400">Rp {(totalBiayaSewa || 0).toLocaleString("id-ID")}</span></div>
                     {totalBelanjaFB > 0 && (
                       <div className="text-[11px] text-amber-400 bg-amber-500/5 p-2 rounded-xl border border-amber-500/10 flex justify-between items-center mt-2">
                         <span>🛒 Pesanan Kantin:</span>
@@ -506,13 +532,50 @@ export default function KasirDashboard() {
                   <div className="flex gap-2">
                     {(statusSekarang === "Pending" || statusSekarang === "Disetujui") ? (
                       <>
-                        <button onClick={() => ubahStatusMeja(meja.id, "Playing", meja.nama_pelanggan, meja.nomor_meja, meja.total, totalBelanjaFB, meja.durasi_bermain, meja.pesanan_fb || [])} className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-950/20 transition-all duration-150 active:scale-95">▶️ Start Main</button>
-                        <button onClick={() => batalkanBookingPending(meja.id, meja.nomor_meja, meja.nama_pelanggan)} className="px-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded-xl cursor-pointer transition-colors"><Trash2 size={15} /></button>
+                        <button 
+                          onClick={() => {
+                            // 🔥 Hitung total sewa berdasarkan durasi
+                            const totalSewa = (meja.durasi_bermain || 1) * HARGA_PER_JAM;
+                            ubahStatusMeja(
+                              meja.id, 
+                              "Playing", 
+                              meja.nama_pelanggan, 
+                              meja.nomor_meja, 
+                              totalSewa, 
+                              totalBelanjaFB, 
+                              meja.durasi_bermain, 
+                              meja.pesanan_fb || []
+                            );
+                          }} 
+                          className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-950/20 transition-all duration-150 active:scale-95"
+                        >
+                          ▶️ Start Main
+                        </button>
+                        <button onClick={() => batalkanBookingPending(meja.id, meja.nomor_meja, meja.nama_pelanggan)} 
+                          className="px-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded-xl cursor-pointer transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </>
                     ) : (
                       <>
                         <button disabled className="bg-slate-950/40 text-slate-700 border border-slate-900 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-not-allowed flex-1">▶️ Start Main</button>
-                        <button disabled={!isPlaying} onClick={() => ubahStatusMeja(meja.id, "Selesai", meja.nama_pelanggan, meja.nomor_meja, meja.total, totalBelanjaFB, meja.durasi_bermain, meja.pesanan_fb || [])} className={`flex-1 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-150 ${isPlaying ? "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white cursor-pointer shadow-lg shadow-rose-950/20 active:scale-95" : "bg-slate-950/40 text-slate-700 border border-slate-900 cursor-not-allowed"}`}>⏹️ Stop & Bayar</button>
+                        <button 
+                          disabled={!isPlaying} 
+                          onClick={() => ubahStatusMeja(
+                            meja.id, 
+                            "Selesai", 
+                            meja.nama_pelanggan, 
+                            meja.nomor_meja, 
+                            totalBiayaSewa, 
+                            totalBelanjaFB, 
+                            meja.durasi_bermain, 
+                            meja.pesanan_fb || []
+                          )} 
+                          className={`flex-1 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-150 ${isPlaying ? "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white cursor-pointer shadow-lg shadow-rose-950/20 active:scale-95" : "bg-slate-950/40 text-slate-700 border border-slate-900 cursor-not-allowed"}`}
+                        >
+                          ⏹️ Stop & Bayar
+                        </button>
                       </>
                     )}
                   </div>
@@ -567,7 +630,6 @@ export default function KasirDashboard() {
 
           {/* PRINT AREA */}
           <div className="print-only-layout font-mono text-[11px] text-black bg-white p-2 w-[58mm] leading-tight">
-            {/* Konten print sama seperti sebelumnya */}
             <div className="text-center border-b border-dashed border-black pb-2 mb-2"><h3 className="font-bold text-sm">ROYAL CUE BILLIARD</h3><p className="font-bold text-[9px]">LAPORAN CLOSING SHIFT</p></div>
             <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>WAKTU : {modalClosing.reportData.waktu}</div><div>KASIR : {modalClosing.reportData.nama_kasir}</div></div>
             <div className="space-y-1 border-b border-dashed border-black pb-2">
@@ -591,14 +653,25 @@ export default function KasirDashboard() {
             </div>
             <div className="bg-white text-black p-5 font-mono text-[11px] leading-relaxed rounded-xl shadow-inner max-h-[50vh] overflow-y-auto border border-slate-200">
               <div className="text-center space-y-0.5 border-b border-dashed border-black/60 pb-3 mb-3"><h4 className="font-black text-sm tracking-wide">ROYAL CUE BILLIARD</h4><p className="text-slate-500 text-[10px]">Jl. Utama Biliar No. 88, Kota</p></div>
-              <div className="space-y-1 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800"><div>WAKTU : {modalStruk.data.waktu_selesai}</div><div>ID    : {modalStruk.data.idBooking}</div><div>MEJA  : {modalStruk.data.nomor_meja}</div><div>CUST  : {modalStruk.data.nama_pelanggan}</div></div>
+              <div className="space-y-1 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800">
+                <div>WAKTU : {modalStruk.data.waktu_selesai}</div>
+                <div>ID    : {modalStruk.data.idBooking}</div>
+                <div>MEJA  : {modalStruk.data.nomor_meja}</div>
+                <div>CUST  : {modalStruk.data.nama_pelanggan}</div>
+              </div>
               <div className="space-y-1.5 border-b border-dashed border-black/60 pb-3 text-slate-900">
                 <div className="flex justify-between font-bold"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>Rp {(modalStruk.data.total_sewa || 0).toLocaleString("id-ID")}</span></div>
                 {modalStruk.data.pesanan_fb && modalStruk.data.pesanan_fb.map((item, idx) => (
-                  <div key={idx} className="pl-2 border-l border-slate-200 mt-1"><div className="flex justify-between text-slate-900"><span>- {item.nama}</span><span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div><div className="text-[10px] text-slate-500">{item.qty} x Rp {(item.harga || 0).toLocaleString("id-ID")}</div></div>
+                  <div key={idx} className="pl-2 border-l border-slate-200 mt-1">
+                    <div className="flex justify-between text-slate-900"><span>- {item.nama}</span><span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div>
+                    <div className="text-[10px] text-slate-500">{item.qty} x Rp {(item.harga || 0).toLocaleString("id-ID")}</div>
+                  </div>
                 ))}
               </div>
-              <div className="pt-2 font-black space-y-1.5 text-right text-slate-900"><div className="flex justify-between text-black text-sm"><span>TOTAL BILL :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div><div className="flex justify-between text-[10px] text-slate-600 font-medium"><span>METODE PEMBAYARAN:</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div></div>
+              <div className="pt-2 font-black space-y-1.5 text-right text-slate-900">
+                <div className="flex justify-between text-black text-sm"><span>TOTAL BILL :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div>
+                <div className="flex justify-between text-[10px] text-slate-600 font-medium"><span>METODE PEMBAYARAN:</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div>
+              </div>
               <div className="text-center pt-4 border-t border-dashed border-black/60 mt-4 text-[10px] text-slate-600 font-bold tracking-widest"><p>--- TERIMA KASIH ---</p></div>
             </div>
             <div className="mt-5 flex gap-2">
@@ -610,14 +683,24 @@ export default function KasirDashboard() {
           {/* PRINT AREA STRUK */}
           <div className="print-only-layout font-mono text-[11px] text-black bg-white p-2 w-[58mm] leading-tight">
             <div className="text-center border-b border-dashed border-black pb-2 mb-2"><h3 className="font-bold text-sm">ROYAL CUE BILLIARD</h3></div>
-            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>TGL  : {modalStruk.data.waktu_selesai}</div><div>MEJA : {modalStruk.data.nomor_meja}</div><div>CUST : {modalStruk.data.nama_pelanggan}</div></div>
+            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}>
+              <div>TGL  : {modalStruk.data.waktu_selesai}</div>
+              <div>MEJA : {modalStruk.data.nomor_meja}</div>
+              <div>CUST : {modalStruk.data.nama_pelanggan}</div>
+            </div>
             <div className="space-y-1 border-b border-dashed border-black pb-2">
               <div className="flex justify-between"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>{(modalStruk.data.total_sewa || 0).toLocaleString("id-ID")}</span></div>
               {modalStruk.data.pesanan_fb && modalStruk.data.pesanan_fb.map((item, idx) => (
-                <div key={idx}><div className="flex justify-between"><span>{item.nama}</span><span>{((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div><div style={{ fontSize: '9px', paddingLeft: '5px', color: '#444' }}>{item.qty} x {(item.harga || 0).toLocaleString("id-ID")}</div></div>
+                <div key={idx}>
+                  <div className="flex justify-between"><span>{item.nama}</span><span>{((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div>
+                  <div style={{ fontSize: '9px', paddingLeft: '5px', color: '#444' }}>{item.qty} x {(item.harga || 0).toLocaleString("id-ID")}</div>
+                </div>
               ))}
             </div>
-            <div className="pt-1.5 font-black"><div className="flex justify-between text-xs"><span>TOTAL  :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div><div className="flex justify-between" style={{ fontSize: '10px', fontWeight: 'normal' }}><span>BAYAR  :</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div></div>
+            <div className="pt-1.5 font-black">
+              <div className="flex justify-between text-xs"><span>TOTAL  :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div>
+              <div className="flex justify-between" style={{ fontSize: '10px', fontWeight: 'normal' }}><span>BAYAR  :</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div>
+            </div>
             <div className="text-center pt-4 border-t border-dashed border-black mt-3" style={{ fontSize: '10px' }}><p>--- TERIMA KASIH ---</p></div>
           </div>
         </div>
