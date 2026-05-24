@@ -18,7 +18,7 @@ export default function ReservasiPage() {
     meja: "Meja 1"
   });
 
-  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
+  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
 
   const getHargaPerJam = (meja) => {
     return meja.toLowerCase().includes("vip") ? 80000 : 50000;
@@ -40,31 +40,29 @@ export default function ReservasiPage() {
       const idBooking = "RC-" + Date.now().toString().slice(-8);
       const idNumerik = Date.now();
 
+      // DATA MINIMAL - HANYA FIELD YANG PASTI ADA
       const dataPesanan = {
         id: idNumerik,
-        idBooking: idBooking,
         nomorMeja: form.meja,
         namaPelanggan: form.nama.trim(),
         statusPemesanan: "Pending",
-        durasiBermain: Number(form.durasi),
-        tanggalMain: form.tanggal,
-        jamMulai: form.jam,
-        noWhatsapp: form.nohp,
-        pesananFB: [],
-        createdAt: new Date().toISOString()
+        durasiBermain: Number(form.durasi)
       };
 
-      console.log("Menyimpan data reservasi:", dataPesanan);
+      console.log("Menyimpan data:", dataPesanan);
 
       const { error, data } = await supabase
         .from("reservasi_billiard")
         .insert([dataPesanan])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        alert("Error: " + error.message);
+        return;
+      }
 
-      console.log("Reservasi berhasil:", data);
-
+      console.log("Berhasil:", data);
       setBookingId(idBooking);
       setSuccess(true);
       
