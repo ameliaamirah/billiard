@@ -12,8 +12,10 @@ export default function ProtectedRoute({ children, allowedRole }) {
      JIKA BELUM LOGIN
   ========================================= */
   if (!isLoggedIn) {
-    // Diarahkan ke halaman login utama (LoginPage.jsx)
-    return <Navigate to="/" replace />;
+    if (allowedRole === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
+    return <Navigate to="/kasir" replace />;
   }
 
   /* =========================================
