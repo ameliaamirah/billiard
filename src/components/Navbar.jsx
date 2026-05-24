@@ -116,7 +116,7 @@ const Navbar = () => {
         </div>
 
         {/* AREA BAWAH: TEKS FOOTER DIPAKSA MENETAP DI BAWAH LAYAR HP */}
-        <div className="px-6 pb-8 pt-4 border-t border-slate-800/40 bg-[#070a13]">
+        <div className="px-6 pb-15 pt-4 border-t border-slate-800/40 bg-[#070a13]">
           <p className="text-[10px] tracking-widest text-slate-500 font-bold uppercase">
             © 2026 ROYAL CUE STUDIO
           </p>
