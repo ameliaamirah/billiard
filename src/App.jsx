@@ -10,12 +10,10 @@ import {
 ========================================= */
 import HomePage from "./pages/HomePage";
 import Reservasi from "./pages/ReservasiPage";
-import Leaderboard from "./pages/LeaderboardPage";
-import StatistikPage from "./pages/StatistikPage";
 import LoginPage from "./pages/LoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 
-// Import Komponen Pembungkus Utama Baru untuk Kasir
+// Komponen Pembungkus Utama Baru untuk Kasir
 import DashboardUtamaKasir from "./pages/DashboardUtamaKasir"; 
 
 /* =========================================
@@ -26,12 +24,12 @@ import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 /* =========================================
-   LAYOUT
+   LAYOUT CONFIGURATION
 ========================================= */
 function LayoutUtama() {
   const location = useLocation();
 
-  // Memastikan navbar & footer bawaan user umum disembunyikan saat masuk panel admin/kasir
+  // Memastikan navbar & footer disembunyikan saat masuk halaman login role maupun panel dashboard
   const hideLayout =
     location.pathname === "/admin" ||
     location.pathname === "/kasir" ||
@@ -41,7 +39,7 @@ function LayoutUtama() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
 
-      {/* NAVBAR */}
+      {/* NAVBAR (Hanya muncul di halaman publik / luar) */}
       {!hideLayout && <Navbar />}
 
       <div className="flex-grow">
@@ -52,11 +50,9 @@ function LayoutUtama() {
           ========================= */}
           <Route path="/" element={<HomePage />} />
           <Route path="/reservasi" element={<Reservasi />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/statistik" element={<StatistikPage />} />
 
           {/* =========================
-              LOGIN ROLE BASED
+              LOGIN ROLE BASED (MURNI FRONTEND)
           ========================= */}
           <Route
             path="/admin"
@@ -81,15 +77,12 @@ function LayoutUtama() {
           />
 
           {/* =========================
-              DASHBOARD UTAMA KASIR (Dua Fitur dalam Satu Rumah)
+              DASHBOARD UTAMA KASIR
           ========================= */}
           <Route
             path="/kasir-dashboard"
             element={
               <ProtectedRoute allowedRole="kasir">
-                {/* Komponen ini otomatis merangkum MonitorKasir & KasirDashboard 
-                  melalui sistem Tab internal navigasi.
-                */}
                 <DashboardUtamaKasir />
               </ProtectedRoute>
             }
@@ -98,7 +91,7 @@ function LayoutUtama() {
         </Routes>
       </div>
 
-      {/* FOOTER */}
+      {/* FOOTER (Otomatis hilang di halaman login kasir, login admin, dan semua jenis dashboard) */}
       {!hideLayout && <Footer />}
 
     </div>
