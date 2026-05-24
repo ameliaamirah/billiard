@@ -39,8 +39,6 @@ const Navbar = () => {
   const navLinks = [
     { name: "Beranda", path: "/" },
     { name: "Reservasi Meja", path: "/reservasi" },
-    { name: "Papan Peringkat", path: "/leaderboard" },
-    { name: "Statistik Member", path: "/statistik" },
   ];
 
   const isNavbarSolid = scrolled || menuOpen || location.pathname !== "/";
@@ -49,17 +47,17 @@ const Navbar = () => {
     <header className={`fixed top-0 left-0 w-full z-[100] transition-all duration-300 border-b ${
       isNavbarSolid 
         ? "bg-[#070a13]/90 backdrop-blur-md border-slate-800/40 shadow-lg py-3" 
-        : "bg-transparent border-transparent py-5"
+        : "bg-transparent border-transparent py-4 md:py-5"
     }`}>
-      <div className="max-w-6xl mx-auto px-5 flex justify-between items-center">
+      <div className="max-w-6xl mx-auto px-4 sm:px-5 flex justify-between items-center">
         
-        {/* LOGO BRAND (DESKTOP) */}
+        {/* LOGO BRAND (DESKTOP & MOBILE RESPONSIVE) */}
         <div 
           className="flex items-center cursor-pointer select-none pb-0.5 border-b-[0.5px] border-[#00ff99]/10 hover:border-[#00ff99]/40 transition-colors duration-300" 
           onClick={() => handleDirectNavigate("/")}
         >
-          <img src="/images/logo.png" alt="Royal Cue Logo" className="h-[36px] w-auto filter brightness-110" />
-          <h1 className="font-black text-lg tracking-wide -ml-1 text-white">
+          <img src="/images/logo.png" alt="Royal Cue Logo" className="h-[30px] md:h-[36px] w-auto filter brightness-110" />
+          <h1 className="font-black text-base md:text-lg tracking-wide -ml-1 text-white">
             Royal Cue <span className="text-[#00ff99]">Studio</span>
           </h1>
         </div>
@@ -80,24 +78,24 @@ const Navbar = () => {
         </nav>
 
         {/* MOBILE TOGGLE BUTTON */}
-        <button className="md:hidden text-2xl text-white cursor-pointer z-[110]" onClick={() => setMenuOpen(!menuOpen)}>
-          {menuOpen ? <FaTimes className="text-white" /> : <FaBars />}
+        <button className="md:hidden text-xl text-white cursor-pointer z-[110] p-1" onClick={() => setMenuOpen(!menuOpen)}>
+          {menuOpen ? <FaTimes /> : <FaBars />}
         </button>
       </div>
 
       {/* BACKGROUND BLUR OVERLAY */}
       {menuOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[85] md:hidden" onClick={() => setMenuOpen(false)} />}
 
-      {/* 📱 MENU MOBILE - DIUBAH MENJADI DARK MODE AGAR KONTRAS DAN MEWAH */} 
-      <div className={`md:hidden fixed top-0 left-0 w-[290px] sm:w-[340px] h-screen bg-[#070a13] border-r border-slate-800/60 text-white transition-transform duration-500 z-[90] rounded-tr-[30px] rounded-br-[30px] shadow-2xl flex flex-col justify-between ${
+      {/* 📱 MENU MOBILE */} 
+      <div className={`md:hidden fixed top-0 left-0 w-[260px] sm:w-[300px] h-screen bg-[#070a13] border-r border-slate-800/60 text-white transition-transform duration-500 z-[90] rounded-tr-[24px] rounded-br-[24px] shadow-2xl flex flex-col justify-between ${
         menuOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
-        <div className="flex flex-col pt-20 px-8 gap-7 overflow-y-auto flex-grow">
+        <div className="flex flex-col pt-16 px-6 gap-5 overflow-y-auto flex-grow">
           
-          {/* LOGO BRAND (MOBILE) */}
-          <div className="flex items-center pb-4 border-b-[0.5px] border-slate-800/40 mb-2">
-            <img src="/images/logo.png" alt="Royal Cue Logo" className="h-[32px] w-auto filter brightness-110" />
-            <span className="font-black text-base tracking-wide text-white -ml-0.5">
+          {/* LOGO BRAND (MOBILE SIDEBAR) */}
+          <div className="flex items-center pb-3 border-b-[0.5px] border-slate-800/40 mb-1">
+            <img src="/images/logo.png" alt="Royal Cue Logo" className="h-[28px] w-auto filter brightness-110" />
+            <span className="font-black text-sm tracking-wide text-white -ml-0.5">
               Royal Cue <span className="text-[#00ff99]">Studio</span>
             </span>
           </div>
@@ -106,9 +104,7 @@ const Navbar = () => {
             <button 
               key={item.name}
               onClick={() => handleDirectNavigate(item.path)}
-              className={`text-left text-xl font-black tracking-wide py-1 transition-all cursor-pointer ${
-                /* Sekarang warna hijau neon (#00ff99) akan menyala tajam di atas background gelap, 
-                   dan menu yang tidak aktif berwarna abu-abu terang yang elegan */
+              className={`text-left text-base font-bold tracking-wide py-1.5 transition-all cursor-pointer ${
                 location.pathname === item.path ? "text-[#00ff99]" : "text-slate-300 hover:text-white"
               }`}
             >
@@ -118,7 +114,7 @@ const Navbar = () => {
         </div>
 
         {/* FOOTER MENU MOBILE */}
-        <div className="px-8 pb-8 pt-4 border-t border-slate-800/40">
+        <div className="px-6 pb-6 pt-3 border-t border-slate-800/40">
           <p className="text-[9px] tracking-widest text-slate-500 font-bold uppercase">© 2026 ROYAL CUE STUDIO</p>
         </div>
       </div>

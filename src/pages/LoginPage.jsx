@@ -2,12 +2,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 
-// ✅ PERUBAHAN: Menggunakan environment variable Vite
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
-  (window.location.hostname === "localhost" 
-    ? "http://localhost:4000" 
-    : "https://royal-cue-backend.onrender.com");
-
 export default function LoginPage({ roleLogin }) {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
@@ -15,49 +9,42 @@ export default function LoginPage({ roleLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setLoading(true);
 
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          password,
-          role: roleLogin,
-        }),
-      });
+    // 🕵️ SIMULASI VALIDASI AKUN DEMO LANGSUNG DI FRONTEND (MURNI LOKAL)
+    setTimeout(() => {
+      const validUsers = [
+        { username: "admin", password: "admin123", role: "admin" },
+        { username: "kasir", password: "kasir123", role: "kasir" }
+      ];
 
-      const data = await response.json();
+      // Mencari kecocokan data input dengan akun demo
+      const userFound = validUsers.find(
+        (u) => u.username === username.toLowerCase() && u.password === password
+      );
 
-      if (response.ok) {
+      if (userFound) {
         setLoading(false);
         
-        localStorage.setItem("token", data.token || "authenticated");
-        localStorage.setItem("role", data.role || roleLogin);
-        localStorage.setItem("username", data.username || username);
+        // Simpan penanda sesi masuk tiruan ke browser agar aman
+        localStorage.setItem("token", "simulated_frontend_token_xyz123");
+        localStorage.setItem("role", userFound.role);
+        localStorage.setItem("username", userFound.username);
         
-        // Arahkan sesuai role
-        if (data.role === "admin") {
+        // Mengarahkan ke rute dashboard sesuai hak akses akun
+        if (userFound.role === "admin") {
           navigate("/admin-dashboard");
         } else {
           navigate("/kasir-dashboard");
         }
       } else {
-        throw new Error(data.message || "Username atau password salah");
+        setLoading(false);
+        // Alert penolakan rapi tanpa pesan error backend yang membingungkan
+        alert(`Gagal Login: Username atau password untuk ${roleLogin} tidak sesuai.`);
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      setLoading(false);
-      alert(error.message === "Failed to fetch" 
-        ? "Server error: Gagal terhubung ke server backend. Pastikan backend di Render sudah aktif."
-        : `Gagal Login: ${error.message}`
-      );
-    }
+    }, 600); // Memberikan efek jeda loading halus seolah-olah memproses data
   };
 
   return (
