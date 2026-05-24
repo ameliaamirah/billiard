@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaUser, FaPhoneAlt, FaClock, FaDiceD6, FaMoneyBillWave } from "react-icons/fa";
+// 🟢 IMPORT CLIENT SUPABASE YANG SUDAH KAMU BUAT
+import { supabase } from "../supabaseClient";
 
 export default function ReservasiPage() {
   const navigate = useNavigate();
@@ -23,50 +25,66 @@ export default function ReservasiPage() {
     return hargaPerJam * form.durasi;
   };
 
-  const handleBooking = (e) => {
+  // 🔥 FUNGSI RE-INDEX UNTUK MENCARI ID TERKECIL YANG KOSONG (RESET KE 1 JIKA ID 1 DIHAPUS)
+  const hitungIdRapatTerkecil = async () => {
+    const { data: semuaData, error } = await supabase
+      .from("reservasi_billiard")
+      .select("id")
+      .order("id", { ascending: true });
+
+    if (error) throw error;
+
+    let idKandidat = 1;
+    if (semuaData && semuaData.length > 0) {
+      // Ambil semua angka id yang aktif di database menjadi array murni, misal: [2, 3]
+      const kumpulanIdAktif = semuaData.map((item) => item.id);
+      
+      // Lakukan looping mencari angka terkecil yang bolong/hilang dari antrean
+      while (kumpulanIdAktif.includes(idKandidat)) {
+        idKandidat++;
+      }
+    }
+    return idKandidat;
+  };
+
+  const handleBooking = async (e) => {
     e.preventDefault();
     setLoading(true); 
 
-    // Simulasi delay pengerjaan 600ms agar efek loading tombol tetap bekerja dengan mulus
-    setTimeout(() => {
-      try {
-        const idBooking = "RC-" + Math.floor(100000 + Math.random() * 900000);
-        const totalEstimasi = hitungEstimasiHarga();
+    try {
+      // 1. Jalankan fungsi hitung ID rapat online
+      const idUrutRapat = await hitungIdRapatTerkecil();
 
-        // 💾 AMBIL DATA LAMA DI LOCALSTORAGE (JIKA ADA)
-        const dataLama = JSON.parse(localStorage.getItem("reservasi_billiard")) || [];
+      const idBooking = "RC-" + Math.floor(100000 + Math.random() * 900000);
+      const totalEstimasi = hitungEstimasiHarga();
 
-        // STRUKTUR DATA: Disesuaikan agar terbaca sempurna oleh filter KasirDashboard
-        const dataPesanan = {
-          id: Date.now(), // Gunakan timestamp murni sebagai index key utama di React
-          idBooking: idBooking,
-          namaPelanggan: form.nama.trim(),
-          nomorWhatsApp: form.nohp,
-          tanggalMain: form.tanggal,
-          jamMulai: "", // Kosong, nanti Kasir yang menentukan saat klik "Start"
-          jamSelesai: "",
-          durasiBermain: Number(form.durasi),
-          nomorMeja: form.meja,
-          total: totalEstimasi,
-          statusPemesanan: "Pending", // Status awal wajib Pending agar masuk antrean
-          status: "Pending",
-          waktuDibuat: new Date().toLocaleString("id-ID")
-        };
+      // 2. STRUKTUR DATA: Disesuaikan dengan kolom tabel PostgreSQL Supabase-mu
+      const dataPesanan = {
+        id: idUrutRapat, // ID angka rapat manual (Bukan autoincrement database)
+        idBooking: idBooking,
+        namaPelanggan: form.nama.trim(),
+        nomorWhatsApp: form.nohp,
+        tanggalMain: form.tanggal,
+        jamMulai: form.jam, 
+        durasiBermain: Number(form.durasi),
+        nomorMeja: form.meja,
+        statusPemesanan: "Pending" // Default awal status di kasir
+      };
 
-        // GABUNGKAN DATA BARU DI ATAS DATA LAMA
-        const dataDiperbarui = [dataPesanan, ...dataLama];
+      // 3. TEMBAK DATA ONLINE KE AWAN SUPABASE
+      const { error: errorInsert } = await supabase
+        .from("reservasi_billiard")
+        .insert([dataPesanan]);
 
-        // SIMPAN KE LOCALSTORAGE
-        localStorage.setItem("reservasi_billiard", JSON.stringify(dataDiperbarui));
+      if (errorInsert) throw errorInsert;
 
-        setLoading(false); 
-        setSuccess(true);
-      } catch (error) {
-        console.error("Gagal menyimpan data:", error);
-        setLoading(false);
-        alert("Terjadi kesalahan sistem saat menyimpan data boking lokal.");
-      }
-    }, 600);
+      setLoading(false); 
+      setSuccess(true);
+    } catch (error) {
+      console.error("Gagal menyimpan data ke Supabase:", error);
+      setLoading(false);
+      alert("Terjadi kesalahan sistem: " + error.message);
+    }
   };
 
   return (
@@ -107,7 +125,7 @@ export default function ReservasiPage() {
             <div className="relative flex items-center">
               <FaPhoneAlt className="absolute left-4 text-slate-500 text-xs" />
               <input 
-                type="tel" 
+                type="text" 
                 placeholder="Contoh: 081234567xxx" 
                 required 
                 className="w-full bg-slate-900/60 border border-slate-800 p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm" 
@@ -205,7 +223,7 @@ export default function ReservasiPage() {
         </form>
       </div>
 
-      {/* Modal Popup Sukses Boking */}
+      {/* Modal Popup Sukses Booking */}
       {success && (
         <div className="fixed inset-0 z-[150] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-6 text-center">
           <div className="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6">
