@@ -1,16 +1,13 @@
 import { Navigate } from "react-router-dom";
 
 export default function ProtectedRoute({ children, allowedRole }) {
-  /* =========================================
-     AMBIL DATA LOGIN DARI LOCAL STORAGE
-  ========================================= */
-  // Karena murni frontend, kita bisa cek string 'true' atau eksistensi data
   const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   const role = localStorage.getItem("role");
 
-  /* =========================================
-     JIKA BELUM LOGIN
-  ========================================= */
+  /* ==========================================================
+     JIKA BELUM LOGIN: 
+     Arahkan ke rute login masing-masing, bukan ke halaman utama
+     ========================================================== */
   if (!isLoggedIn) {
     if (allowedRole === "admin") {
       return <Navigate to="/admin" replace />;
@@ -18,16 +15,20 @@ export default function ProtectedRoute({ children, allowedRole }) {
     return <Navigate to="/kasir" replace />;
   }
 
-  /* =========================================
-     JIKA ROLE TIDAK SESUAI
-  ========================================= */
+  /* ==========================================================
+     JIKA ROLE TIDAK SESUAI (Misal: Kasir maksa masuk ke Admin)
+     ========================================================== */
   if (allowedRole && role !== allowedRole) {
-    // Jika kasir mencoba masuk ke halaman admin, lempar balik ke Beranda/Login
-    return <Navigate to="/" replace />;
+    // Kembalikan ke halaman dashboard yang menjadi haknya
+    if (role === "kasir") return <Navigate to="/kasir-dashboard" replace />;
+    if (role === "admin") return <Navigate to="/admin-dashboard" replace />;
+    
+    // Jika data role rusak, paksa login ulang
+    return <Navigate to="/kasir" replace />;
   }
 
-  /* =========================================
-     JIKA LOLOS VALIDASI FRONTEND
-  ========================================= */
+  /* ==========================================
+     JIKA LOLOS VALIDASI, MELEWATI GERBANG
+     ========================================== */
   return children;
 }
