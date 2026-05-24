@@ -29,13 +29,14 @@ export default function ReservasiPage() {
   };
 
   const cekKetersediaanMeja = async () => {
+    // PERBAIKAN: Gunakan nama kolom yang benar (camelCase)
     const { data, error } = await supabase
       .from("reservasi_billiard")
       .select("*")
-      .eq("nomor_meja", form.meja)
-      .eq("tanggal_main", form.tanggal)
-      .eq("jam_mulai", form.jam)
-      .in("status_pemesanan", ["Pending", "Playing"]);
+      .eq("nomorMeja", form.meja)  // ← Ganti dari nomor_meja ke nomorMeja
+      .eq("tanggalMain", form.tanggal)  // ← Ganti dari tanggal_main ke tanggalMain
+      .eq("jamMulai", form.jam)  // ← Ganti dari jam_mulai ke jamMulai
+      .in("statusPemesanan", ["Pending", "Playing"]);  // ← Ganti dari status_pemesanan ke statusPemesanan
 
     if (error) throw error;
     return data.length === 0;
@@ -60,19 +61,22 @@ export default function ReservasiPage() {
       const idBooking = "RC-" + Date.now().toString().slice(-8);
       const idNumerik = Date.now();
 
+      // PERBAIKAN: Gunakan nama kolom yang benar (camelCase)
       const dataPesanan = {
         id: idNumerik,
-        id_booking: idBooking,
-        nomor_meja: form.meja,
-        nama_pelanggan: form.nama.trim(),
-        status_pemesanan: "Pending",
-        durasi_bermain: Number(form.durasi),
-        tanggal_main: form.tanggal,
-        jam_mulai: form.jam,
-        no_whatsapp: form.nohp,
-        pesanan_fb: [],
-        created_at: new Date().toISOString()
+        idBooking: idBooking,  // ← Ganti dari id_booking ke idBooking
+        nomorMeja: form.meja,  // ← Ganti dari nomor_meja ke nomorMeja
+        namaPelanggan: form.nama.trim(),  // ← Ganti dari nama_pelanggan ke namaPelanggan
+        statusPemesanan: "Pending",  // ← Ganti dari status_pemesanan ke statusPemesanan
+        durasiBermain: Number(form.durasi),  // ← Ganti dari durasi_bermain ke durasiBermain
+        tanggalMain: form.tanggal,  // ← Ganti dari tanggal_main ke tanggalMain
+        jamMulai: form.jam,  // ← Ganti dari jam_mulai ke jamMulai
+        noWhatsapp: form.nohp,  // ← Ganti dari no_whatsapp ke noWhatsapp
+        pesananFB: [],  // ← Ganti dari pesanan_fb ke pesananFB
+        createdAt: new Date().toISOString()  // ← Ganti dari created_at ke createdAt
       };
+
+      console.log("Menyimpan data:", dataPesanan);
 
       const { error } = await supabase.from("reservasi_billiard").insert([dataPesanan]);
       if (error) throw error;
@@ -138,10 +142,10 @@ export default function ReservasiPage() {
             <label className="text-[11px] font-bold text-[#00ff99]">DURASI (JAM)</label>
             <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
               <button type="button" onClick={() => setForm({...form, durasi: Math.max(1, form.durasi - 1)})}
-                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold">-</button>
+                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer">-</button>
               <span className="font-bold"><FaClock className="inline mr-2 text-[#00ff99]" />{form.durasi} Jam</span>
               <button type="button" onClick={() => setForm({...form, durasi: form.durasi + 1})}
-                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold">+</button>
+                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer">+</button>
             </div>
           </div>
 
@@ -154,21 +158,21 @@ export default function ReservasiPage() {
           </div>
 
           <button type="submit" disabled={loading}
-            className="w-full bg-[#00aa66] hover:bg-[#00cc7a] font-bold py-4 rounded-xl transition-all disabled:opacity-50">
+            className="w-full bg-[#00aa66] hover:bg-[#00cc7a] font-bold py-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">
             {loading ? "Memproses..." : "KONFIRMASI BOOKING"}
           </button>
         </form>
       </div>
 
       {success && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-6 z-50">
           <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl text-center max-w-md">
             <FaCheckCircle className="text-[#00ff99] text-6xl mx-auto mb-4" />
             <h3 className="text-2xl font-bold mb-2">Booking Berhasil!</h3>
             <p className="text-slate-400 text-sm">Kode Booking: <span className="text-[#00ff99] font-mono">{bookingId}</span></p>
             <p className="text-slate-400 text-xs mt-4">Silakan sebutkan nama Anda saat tiba di kasir.</p>
             <button onClick={() => { setSuccess(false); navigate("/"); }}
-              className="mt-6 w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-[#00ff99] transition">
+              className="mt-6 w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-[#00ff99] transition cursor-pointer">
               Kembali ke Beranda
             </button>
           </div>
