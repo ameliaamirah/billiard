@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { Search, Coffee, History, LayoutDashboard, Trash2, Printer, X, MoveHorizontal, Lock } from "lucide-react"; 
 import FandBModal from "../components/FandBModal"; 
+import { supabase } from "../supabaseClient";
 
 export default function KasirDashboard() {
   const [daftarMeja, setDaftarMeja] = useState([]);
   const [riwayatTransaksi, setRiwayatTransaksi] = useState([]);
   const [filterAktif, setFilterAktif] = useState("Semua"); 
   const [cariNama, setCariNama] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // STATE UNTUK KONTROL MODAL F&B
   const [modalFB, setModalFB] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pesananSaatIni: [] });
@@ -17,100 +19,183 @@ export default function KasirDashboard() {
   // 🔒 STATE UNTUK MODAL REPORT CLOSING SHIFT
   const [modalClosing, setModalClosing] = useState({ isOpen: false, reportData: null });
 
-  // 🔄 1. Ambil data dari LocalStorage
-  const muatDataLokal = () => {
-    const dataBokingan = JSON.parse(localStorage.getItem("reservasi_billiard")) || [];
-    const dataRiwayat = JSON.parse(localStorage.getItem("riwayat_transaksi_billiard")) || [];
-    setDaftarMeja(dataBokingan);
-    setRiwayatTransaksi(dataRiwayat);
+  // 🔄 1. Ambil data dari Supabase
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      // Ambil data reservasi aktif (belum selesai)
+      const { data: reservasi, error: reservasiError } = await supabase
+        .from("reservasi_billiard")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (reservasiError) throw reservasiError;
+      
+      // Ambil data riwayat transaksi
+      const { data: riwayat, error: riwayatError } = await supabase
+        .from("riwayat_transaksi")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (riwayatError) throw riwayatError;
+      
+      setDaftarMeja(reservasi || []);
+      setRiwayatTransaksi(riwayat || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      alert("Gagal memuat data: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Setup realtime subscription
   useEffect(() => {
-    muatDataLokal();
-    const interval = setInterval(muatDataLokal, 2000);
-    return () => clearInterval(interval);
+    fetchData();
+    
+    // Subscribe ke perubahan tabel reservasi_billiard
+    const channelReservasi = supabase
+      .channel('reservasi_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'reservasi_billiard' }, 
+        () => fetchData()
+      )
+      .subscribe();
+    
+    // Subscribe ke perubahan tabel riwayat_transaksi
+    const channelRiwayat = supabase
+      .channel('riwayat_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'riwayat_transaksi' }, 
+        () => fetchData()
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channelReservasi);
+      supabase.removeChannel(channelRiwayat);
+    };
   }, []);
 
   // ⚡ 2. FUNGSI UTAMA: Start & Stop Billing
-  const ubahStatusMeja = (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB = 0, durasi, itemFB = []) => {
-    if (statusBaru === "Selesai") {
-      const metode = prompt("Masukkan metode pembayaran (Cash / QRIS / Transfer):", "Cash") || "Cash";
-      const jamSelesai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
-      const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
-      const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
+  const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB = 0, durasi, itemFB = []) => {
+    try {
+      if (statusBaru === "Selesai") {
+        const metode = prompt("Masukkan metode pembayaran (Cash / QRIS / Transfer):", "Cash") || "Cash";
+        const jamSelesai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
+        const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
+        const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
 
-      const dataStrukBaru = {
-        idBooking: "RC-" + String(id).slice(-5),
-        nomorMeja,
-        namaPelanggan,
-        durasi,
-        totalSewa: Number(totalSewa || 0),
-        totalFB: Number(totalFB || 0),
-        totalAkhir: totalAkhirSemua,
-        metodePembayaran: metode,
-        waktuSelesai: `${tanggalHariIni} ${jamSelesai}`,
-        pesananFB: itemFB
-      };
+        // Cari data meja yang akan diselesaikan
+        const mejaYangAkanDiselesaikan = daftarMeja.find(m => m.id === id);
+        
+        const dataStrukBaru = {
+          id_booking: "RC-" + String(id).slice(-5),
+          nomor_meja: nomorMeja,
+          nama_pelanggan: namaPelanggan,
+          durasi: durasi,
+          total_sewa: Number(totalSewa || 0),
+          total_fb: Number(totalFB || 0),
+          total_akhir: totalAkhirSemua,
+          metode_pembayaran: metode,
+          waktu_selesai: `${tanggalHariIni} ${jamSelesai}`,
+          pesanan_fb: itemFB,
+          created_at: new Date().toISOString()
+        };
 
-      const riwayatDiupdate = [dataStrukBaru, ...riwayatTransaksi];
-      setRiwayatTransaksi(riwayatDiupdate);
-      localStorage.setItem("riwayat_transaksi_billiard", JSON.stringify(riwayatDiupdate));
+        // Simpan ke riwayat_transaksi
+        const { error: insertError } = await supabase
+          .from("riwayat_transaksi")
+          .insert([dataStrukBaru]);
+        
+        if (insertError) throw insertError;
 
-      const dataSisa = daftarMeja.filter((meja) => String(meja.id) !== String(id) && String(meja._id) !== String(id));
-      setDaftarMeja(dataSisa);
-      localStorage.setItem("reservasi_billiard", JSON.stringify(dataSisa));
+        // Hapus dari reservasi_billiard
+        const { error: deleteError } = await supabase
+          .from("reservasi_billiard")
+          .delete()
+          .eq("id", id);
+        
+        if (deleteError) throw deleteError;
 
-      setModalStruk({ isOpen: true, data: dataStrukBaru });
+        setModalStruk({ isOpen: true, data: { ...dataStrukBaru, idBooking: dataStrukBaru.id_booking } });
+        await fetchData();
 
-    } else {
-      const jamSekarang = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
-      const dataDiupdate = daftarMeja.map((meja) => {
-        if (String(meja.id) === String(id) || String(meja._id) === String(id)) {
-          return { ...meja, statusPemesanan: statusBaru, status: statusBaru, jamMulai: jamSekarang };
-        }
-        return meja;
-      });
-      setDaftarMeja(dataDiupdate);
-      localStorage.setItem("reservasi_billiard", JSON.stringify(dataDiupdate));
+      } else {
+        // Update status menjadi Playing
+        const { error: updateError } = await supabase
+          .from("reservasi_billiard")
+          .update({ 
+            status_pemesanan: statusBaru,
+            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })
+          })
+          .eq("id", id);
+        
+        if (updateError) throw updateError;
+        await fetchData();
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Gagal mengupdate status: " + error.message);
     }
   };
 
   // 🗑️ 3. FUNGSI: BATALKAN BOOKING PENDING
-  const batalkanBookingPending = (id, nomorMeja, namaPelanggan) => {
+  const batalkanBookingPending = async (id, nomorMeja, namaPelanggan) => {
     if (window.confirm(`Apakah Anda yakin ingin membatalkan/menghapus pesanan ${nomorMeja} atas nama "${namaPelanggan}"?`)) {
-      const dataSisa = daftarMeja.filter((meja) => String(meja.id) !== String(id) && String(meja._id) !== String(id));
-      setDaftarMeja(dataSisa);
-      localStorage.setItem("reservasi_billiard", JSON.stringify(dataSisa));
+      try {
+        const { error } = await supabase
+          .from("reservasi_billiard")
+          .delete()
+          .eq("id", id);
+        
+        if (error) throw error;
+        await fetchData();
+        alert("✅ Pesanan berhasil dibatalkan");
+      } catch (error) {
+        console.error("Error cancelling booking:", error);
+        alert("Gagal membatalkan pesanan: " + error.message);
+      }
     }
   };
 
   // 🍳 4. FUNGSI: PINDAH MEJA (SWITCH TABLE)
-  const tanganiPindahMeja = (idMejaAsal, nomorMejaAsal) => {
-    const semuaNomorMejaTerpakai = daftarMeja.filter(m => (m.statusPemesanan || m.status) === "Playing").map(m => m.nomorMeja.toLowerCase());
-    const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
-    const mejaTersedia = daftarSemuaMeja.filter(noMeja => !semuaNomorMejaTerpakai.includes(noMeja.toLowerCase()));
+  const tanganiPindahMeja = async (idMejaAsal, nomorMejaAsal) => {
+    try {
+      const semuaNomorMejaTerpakai = daftarMeja
+        .filter(m => m.status_pemesanan === "Playing")
+        .map(m => m.nomor_meja?.toLowerCase());
+      
+      const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
+      const mejaTersedia = daftarSemuaMeja.filter(noMeja => !semuaNomorMejaTerpakai.includes(noMeja.toLowerCase()));
 
-    if (mejaTersedia.length === 0) {
-      alert("⚠️ Maaf, seluruh meja biliar saat ini sedang terisi penuh!");
-      return;
+      if (mejaTersedia.length === 0) {
+        alert("⚠️ Maaf, seluruh meja biliar saat ini sedang terisi penuh!");
+        return;
+      }
+
+      const inputMejaBaru = prompt(`🔄 PINDAH MEJA — ${nomorMejaAsal.toUpperCase()}\nPilihan meja kosong:\n[ ${mejaTersedia.join(" ]  [ ")} ]\n\nKetik nomor meja baru (Contoh: Meja 3):`);
+      if (!inputMejaBaru) return;
+
+      const mejaTujuanValid = mejaTersedia.find(m => m.toLowerCase() === inputMejaBaru.trim().toLowerCase());
+      if (!mejaTujuanValid) {
+        alert("⚠️ Meja tidak valid atau sedang digunakan!");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("reservasi_billiard")
+        .update({ nomor_meja: mejaTujuanValid })
+        .eq("id", idMejaAsal);
+      
+      if (error) throw error;
+      
+      await fetchData();
+      alert(`🟢 BERHASIL! Pelanggan pindah ke ${mejaTujuanValid}.`);
+    } catch (error) {
+      console.error("Error moving table:", error);
+      alert("Gagal memindahkan meja: " + error.message);
     }
-
-    const inputMejaBaru = prompt(`🔄 PINDAH MEJA — ${nomorMejaAsal.toUpperCase()}\nPilihan meja kosong:\n[ ${mejaTersedia.join(" ]  [ ")} ]\n\nKetik nomor meja baru (Contoh: Meja 3):`);
-    if (!inputMejaBaru) return;
-
-    const mejaTujuanValid = mejaTersedia.find(m => m.toLowerCase() === inputMejaBaru.trim().toLowerCase());
-    if (!mejaTujuanValid) {
-      alert("⚠️ Meja tidak valid atau sedang digunakan!");
-      return;
-    }
-
-    const dataDiupdate = daftarMeja.map((meja) => {
-      if (String(meja.id) === String(idMejaAsal) || String(meja._id) === String(idMejaAsal)) { return { ...meja, nomorMeja: mejaTujuanValid }; }
-      return meja;
-    });
-    setDaftarMeja(dataDiupdate);
-    localStorage.setItem("reservasi_billiard", JSON.stringify(dataDiupdate));
-    alert(`🟢 BERHASIL! Pelanggan pindah ke ${mejaTujuanValid}.`);
   };
 
   // 🔒 5. FUNGSI: CLOSING SHIFT (TUTUP BUKU KASIR)
@@ -128,12 +213,12 @@ export default function KasirDashboard() {
     let totalNonTunai = 0;
 
     riwayatTransaksi.forEach((item) => {
-      totalSewaMeja += item.totalSewa;
-      totalKantin += item.totalFB;
-      if (item.metodePembayaran.toLowerCase() === "cash" || item.metodePembayaran.toLowerCase() === "tunai") {
-        totalTunai += item.totalAkhir;
+      totalSewaMeja += item.total_sewa || 0;
+      totalKantin += item.total_fb || 0;
+      if ((item.metode_pembayaran || "").toLowerCase() === "cash" || (item.metode_pembayaran || "").toLowerCase() === "tunai") {
+        totalTunai += item.total_akhir || 0;
       } else {
-        totalNonTunai += item.totalAkhir;
+        totalNonTunai += item.total_akhir || 0;
       }
     });
 
@@ -143,65 +228,91 @@ export default function KasirDashboard() {
     setModalClosing({
       isOpen: true,
       reportData: {
-        namaKasir,
+        nama_kasir: namaKasir,
         waktu: `${tanggalClosing} ${jamClosing}`,
-        totalTransaksi: riwayatTransaksi.length,
-        totalSewaMeja,
-        totalKantin,
-        totalTunai,
-        totalNonTunai,
-        grandTotal: totalSewaMeja + totalKantin
+        total_transaksi: riwayatTransaksi.length,
+        total_sewa_meja: totalSewaMeja,
+        total_kantin: totalKantin,
+        total_tunai: totalTunai,
+        total_non_tunai: totalNonTunai,
+        grand_total: totalSewaMeja + totalKantin,
+        created_at: new Date().toISOString()
       }
     });
   };
 
-  // 🔒 OPTIMASI AKHIR: Amankan data shift ke database arsip permanen owner sebelum di-reset harian
-  const selesaikanClosingDanReset = () => {
+  // 🔒 OPTIMASI AKHIR: Amankan data shift ke database arsip permanen
+  const selesaikanClosingDanReset = async () => {
     if (window.confirm("Apakah laporan cetak sudah sesuai? Klik OK untuk mengosongkan omset dashboard dan mengarsip shift ini secara permanen.")) {
-      
-      // Ambil data laporan permanen owner terdahulu (jika sudah ada)
-      const dataLaporanLamaOwner = JSON.parse(localStorage.getItem("arsip_laporan_owner")) || [];
-      
-      // Masukkan data closing shift yang baru ke dalam array arsip abadi
-      const logArsipBaru = {
-        idLaporan: "REP-" + Date.now(),
-        ...modalClosing.reportData
-      };
-      
-      const updateLaporanOwner = [logArsipBaru, ...dataLaporanLamaOwner];
-      
-      // Simpan ke penampung baru di localStorage yang tidak bisa di-reset kasir harian
-      localStorage.setItem("arsip_laporan_owner", JSON.stringify(updateLaporanOwner));
-      
-      // Reset layar transaksi kasir aktif menjadi Rp 0 untuk shift baru
-      setRiwayatTransaksi([]);
-      localStorage.removeItem("riwayat_transaksi_billiard");
-      
-      setModalClosing({ isOpen: false, reportData: null });
-      setFilterAktif("Semua");
-      alert("✅ Sukses! Data shift telah diarsipkan dengan aman ke Laporan Manajemen Eksekutif Owner.");
+      try {
+        // Simpan laporan ke arsip_laporan_owner
+        const { error: insertError } = await supabase
+          .from("arsip_laporan_owner")
+          .insert([modalClosing.reportData]);
+        
+        if (insertError) throw insertError;
+        
+        // Hapus semua riwayat transaksi
+        const { error: deleteError } = await supabase
+          .from("riwayat_transaksi")
+          .delete()
+          .neq("id", 0);
+        
+        if (deleteError) throw deleteError;
+        
+        // Reset state
+        setRiwayatTransaksi([]);
+        setModalClosing({ isOpen: false, reportData: null });
+        setFilterAktif("Semua");
+        
+        await fetchData();
+        alert("✅ Sukses! Data shift telah diarsipkan dengan aman ke database.");
+      } catch (error) {
+        console.error("Error closing shift:", error);
+        alert("Gagal menutup shift: " + error.message);
+      }
     }
   };
 
-  const simpanPesananKantin = (id, keranjangBaru) => {
-    const dataDiupdate = daftarMeja.map((meja) => {
-      if (String(meja.id) === String(id) || String(meja._id) === String(id)) { return { ...meja, pesananFB: keranjangBaru }; }
-      return meja;
-    });
-    setDaftarMeja(dataDiupdate);
-    localStorage.setItem("reservasi_billiard", JSON.stringify(dataDiupdate));
+  const simpanPesananKantin = async (id, keranjangBaru) => {
+    try {
+      const { error } = await supabase
+        .from("reservasi_billiard")
+        .update({ pesanan_fb: keranjangBaru })
+        .eq("id", id);
+      
+      if (error) throw error;
+      await fetchData();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      alert("Gagal menyimpan pesanan: " + error.message);
+    }
   };
 
-  // Logika Filter
+  // Logika Filter (perhatikan perubahan nama field)
   const mejaTerfilter = daftarMeja.filter((meja) => {
-    const statusPilihan = meja.statusPemesanan || meja.status || "Pending";
-    const cocokFilter = filterAktif === "Semua" ? true : statusPilihan.toLowerCase() === filterAktif.toLowerCase();
-    const cocokCari = (meja.namaPelanggan || "").toLowerCase().includes(cariNama.toLowerCase()) || (meja.nomorMeja || "").toLowerCase().includes(cariNama.toLowerCase());
+    const statusPilihan = meja.status_pemesanan || "Pending";
+    const cocokFilter = filterAktif === "Semua" ? true : 
+      (filterAktif === "Riwayat" ? false : statusPilihan.toLowerCase() === filterAktif.toLowerCase());
+    const cocokCari = (meja.nama_pelanggan || "").toLowerCase().includes(cariNama.toLowerCase()) || 
+                      (meja.nomor_meja || "").toLowerCase().includes(cariNama.toLowerCase());
     return cocokFilter && cocokCari;
   });
 
-  const riwayatTerfilter = riwayatTransaksi.filter((item) => (item.namaPelanggan || "").toLowerCase().includes(cariNama.toLowerCase()) || (item.nomorMeja || "").toLowerCase().includes(cariNama.toLowerCase()));
-  const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + curr.totalAkhir, 0);
+  const riwayatTerfilter = riwayatTransaksi.filter((item) => 
+    (item.nama_pelanggan || "").toLowerCase().includes(cariNama.toLowerCase()) || 
+    (item.nomor_meja || "").toLowerCase().includes(cariNama.toLowerCase())
+  );
+  
+  const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + (curr.total_akhir || 0), 0);
+
+  if (loading && daftarMeja.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#090D1A] flex items-center justify-center">
+        <div className="text-emerald-400 text-xl">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#090D1A] bg-gradient-to-tr from-[#090D1A] via-[#0E172A] to-[#0F172A] text-slate-100 p-6 md:p-8 screen-section font-sans selection:bg-emerald-500 selection:text-slate-900">
@@ -297,17 +408,17 @@ export default function KasirDashboard() {
                       </td>
                     </tr>
                   ) : (
-                    riwayatTerfilter.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-800/20 transition-colors duration-150">
-                        <td className="p-4 text-xs font-mono text-slate-400">{item.waktuSelesai}</td>
-                        <td className="p-4 font-black text-emerald-400">{item.nomorMeja}</td>
-                        <td className="p-4 font-bold text-white">{item.namaPelanggan}</td>
-                        <td className="p-4 text-xs text-slate-300">{item.durasi} Jam <span className="text-slate-500 mx-1">|</span> Rp {item.totalSewa.toLocaleString("id-ID")}</td>
-                        <td className="p-4 text-xs text-amber-400 font-semibold">Rp {item.totalFB.toLocaleString("id-ID")}</td>
-                        <td className="p-4 font-mono font-bold text-emerald-400">Rp {item.totalAkhir.toLocaleString("id-ID")}</td>
+                    riwayatTerfilter.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/20 transition-colors duration-150">
+                        <td className="p-4 text-xs font-mono text-slate-400">{item.waktu_selesai}</td>
+                        <td className="p-4 font-black text-emerald-400">{item.nomor_meja}</td>
+                        <td className="p-4 font-bold text-white">{item.nama_pelanggan}</td>
+                        <td className="p-4 text-xs text-slate-300">{item.durasi} Jam <span className="text-slate-500 mx-1">|</span> Rp {(item.total_sewa || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-4 text-xs text-amber-400 font-semibold">Rp {(item.total_fb || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-4 font-mono font-bold text-emerald-400">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
                         <td className="p-4 text-center">
                           <button 
-                            onClick={() => setModalStruk({ isOpen: true, data: item })} 
+                            onClick={() => setModalStruk({ isOpen: true, data: { ...item, idBooking: item.id_booking } })} 
                             className="p-2 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-xl text-slate-300 border border-slate-700/60 cursor-pointer transition-all"
                           >
                             <Printer size={14} />
@@ -323,14 +434,14 @@ export default function KasirDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {mejaTerfilter.map((meja) => {
-              const statusSekarang = meja.statusPemesanan || meja.status || "Pending";
-              const totalBelanjaFB = (meja.pesananFB || []).reduce((acc, curr) => acc + curr.harga * curr.qty, 0);
+              const statusSekarang = meja.status_pemesanan || "Pending";
+              const totalBelanjaFB = (meja.pesanan_fb || []).reduce((acc, curr) => acc + (curr.harga * (curr.qty || 1)), 0);
               const totalTagihanKeseluruhan = Number(meja.total || 0) + totalBelanjaFB;
               const isPlaying = statusSekarang === "Playing";
 
               return (
                 <div 
-                  key={meja.id || meja._id} 
+                  key={meja.id} 
                   className={`bg-slate-900/60 border rounded-2xl p-6 shadow-xl relative overflow-hidden transition-all duration-300 hover:-translate-y-1 ${
                     isPlaying 
                       ? "border-sky-500/20 shadow-sky-500/5 hover:border-sky-500/40" 
@@ -342,16 +453,16 @@ export default function KasirDashboard() {
                   <div className="flex justify-between items-start mb-5">
                     <div>
                       <h3 className="font-black text-xl text-white tracking-wide flex items-center gap-2">
-                        🎱 {meja.nomorMeja}
+                        🎱 {meja.nomor_meja}
                       </h3>
                       <p className="text-slate-500 text-[10px] font-mono mt-1 bg-slate-950/60 w-fit px-1.5 py-0.5 rounded border border-slate-800/40">
-                        ID: {meja.idBooking || "RC-" + String(meja.id || meja._id).slice(-5)}
+                        ID: {meja.id_booking || "RC-" + String(meja.id).slice(-5)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
                         disabled={!isPlaying} 
-                        onClick={() => tanganiPindahMeja(meja.id || meja._id, meja.nomorMeja)} 
+                        onClick={() => tanganiPindahMeja(meja.id, meja.nomor_meja)} 
                         className={`p-2.5 rounded-xl border transition-all duration-150 ${
                           isPlaying 
                             ? "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 cursor-pointer hover:scale-105" 
@@ -363,7 +474,7 @@ export default function KasirDashboard() {
                       </button>
                       <button 
                         disabled={!isPlaying} 
-                        onClick={() => setModalFB({ isOpen: true, mejaId: meja.id || meja._id, nomorMeja: meja.nomorMeja, pesananSaatIni: meja.pesananFB || [] })} 
+                        onClick={() => setModalFB({ isOpen: true, mejaId: meja.id, nomorMeja: meja.nomor_meja, pesananSaatIni: meja.pesanan_fb || [] })} 
                         className={`p-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all duration-150 ${
                           isPlaying 
                             ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 cursor-pointer hover:scale-105" 
@@ -376,9 +487,9 @@ export default function KasirDashboard() {
                   </div>
                   
                   <div className="space-y-2.5 text-xs border-y border-slate-800/60 py-4 my-4 font-medium text-slate-300">
-                    <div className="flex justify-between"><span className="text-slate-400">👤 Pelanggan:</span> <span className="font-bold text-white text-sm">{meja.namaPelanggan}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">⏱️ Durasi Bermain:</span> <span className="font-semibold text-slate-100">{meja.durasiBermain} Jam</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">🕒 Jam Mulai:</span> <span className="font-mono text-emerald-400 font-semibold">{meja.jamMulai || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">👤 Pelanggan:</span> <span className="font-bold text-white text-sm">{meja.nama_pelanggan}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">⏱️ Durasi Bermain:</span> <span className="font-semibold text-slate-100">{meja.durasi_bermain} Jam</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">🕒 Jam Mulai:</span> <span className="font-mono text-emerald-400 font-semibold">{meja.jam_mulai || "-"}</span></div>
                     {totalBelanjaFB > 0 && (
                       <div className="text-[11px] text-amber-400 bg-amber-500/5 p-2 rounded-xl border border-amber-500/10 flex justify-between items-center mt-2">
                         <span>🛒 Pesanan Kantin:</span>
@@ -395,13 +506,13 @@ export default function KasirDashboard() {
                   <div className="flex gap-2">
                     {(statusSekarang === "Pending" || statusSekarang === "Disetujui") ? (
                       <>
-                        <button onClick={() => ubahStatusMeja(meja.id || meja._id, "Playing")} className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-950/20 transition-all duration-150 active:scale-95">▶️ Start Main</button>
-                        <button onClick={() => batalkanBookingPending(meja.id || meja._id, meja.nomorMeja, meja.namaPelanggan)} className="px-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded-xl cursor-pointer transition-colors"><Trash2 size={15} /></button>
+                        <button onClick={() => ubahStatusMeja(meja.id, "Playing", meja.nama_pelanggan, meja.nomor_meja, meja.total, totalBelanjaFB, meja.durasi_bermain, meja.pesanan_fb || [])} className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-950/20 transition-all duration-150 active:scale-95">▶️ Start Main</button>
+                        <button onClick={() => batalkanBookingPending(meja.id, meja.nomor_meja, meja.nama_pelanggan)} className="px-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 rounded-xl cursor-pointer transition-colors"><Trash2 size={15} /></button>
                       </>
                     ) : (
                       <>
                         <button disabled className="bg-slate-950/40 text-slate-700 border border-slate-900 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider cursor-not-allowed flex-1">▶️ Start Main</button>
-                        <button disabled={!isPlaying} onClick={() => ubahStatusMeja(meja.id || meja._id, "Selesai", meja.namaPelanggan, meja.nomorMeja, meja.total, totalBelanjaFB, meja.durasiBermain, meja.pesananFB || [])} className={`flex-1 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-150 ${isPlaying ? "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white cursor-pointer shadow-lg shadow-rose-950/20 active:scale-95" : "bg-slate-950/40 text-slate-700 border border-slate-900 cursor-not-allowed"}`}>⏹️ Stop & Bayar</button>
+                        <button disabled={!isPlaying} onClick={() => ubahStatusMeja(meja.id, "Selesai", meja.nama_pelanggan, meja.nomor_meja, meja.total, totalBelanjaFB, meja.durasi_bermain, meja.pesanan_fb || [])} className={`flex-1 font-bold py-3 px-4 rounded-xl text-xs uppercase tracking-wider transition-all duration-150 ${isPlaying ? "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white cursor-pointer shadow-lg shadow-rose-950/20 active:scale-95" : "bg-slate-950/40 text-slate-700 border border-slate-900 cursor-not-allowed"}`}>⏹️ Stop & Bayar</button>
                       </>
                     )}
                   </div>
@@ -413,9 +524,16 @@ export default function KasirDashboard() {
       </div>
 
       {/* MODAL F&B */}
-      <FandBModal isOpen={modalFB.isOpen} onClose={() => setModalFB({ ...modalFB, isOpen: false })} mejaId={modalFB.mejaId} nomorMeja={modalFB.nomorMeja} pesananSaatIni={modalFB.pesananSaatIni} onSave={simpanPesananKantin} />
+      <FandBModal 
+        isOpen={modalFB.isOpen} 
+        onClose={() => setModalFB({ ...modalFB, isOpen: false })} 
+        mejaId={modalFB.mejaId} 
+        nomorMeja={modalFB.nomorMeja} 
+        pesananSaatIni={modalFB.pesananSaatIni} 
+        onSave={simpanPesananKantin} 
+      />
 
-      {/* 🧾 MODAL POP-UP REPORT CLOSING SHIFT (X-REPORT) */}
+      {/* MODAL CLOSING SHIFT */}
       {modalClosing.isOpen && modalClosing.reportData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 print-modal-container animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-sm flex flex-col no-print shadow-2xl scale-in">
@@ -425,18 +543,18 @@ export default function KasirDashboard() {
             </div>
             <div className="bg-white text-black p-5 font-mono text-[11px] leading-relaxed rounded-xl shadow-inner max-h-[50vh] overflow-y-auto border border-slate-200">
               <div className="text-center space-y-0.5 border-b border-dashed border-black/60 pb-3 mb-3"><h4 className="font-black text-sm tracking-wide">ROYAL CUE BILLIARD</h4><p className="font-bold text-[10px] tracking-widest uppercase">*** LAPORAN TUTUP SHIFT ***</p></div>
-              <div className="space-y-1.5 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800"><div>WAKTU : {modalClosing.reportData.waktu}</div><div>KASIR : {modalClosing.reportData.namaKasir}</div><div>TOTAL : {modalClosing.reportData.totalTransaksi} Transaksi Selesai</div></div>
+              <div className="space-y-1.5 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800"><div>WAKTU : {modalClosing.reportData.waktu}</div><div>KASIR : {modalClosing.reportData.nama_kasir}</div><div>TOTAL : {modalClosing.reportData.total_transaksi} Transaksi Selesai</div></div>
               <div className="space-y-1.5 border-b border-dashed border-black/60 pb-3 text-slate-900">
                 <p className="font-bold text-[10px]">[ SUMBER OMSET ]</p>
-                <div className="flex justify-between"><span>- Sewa Meja</span><span>Rp {modalClosing.reportData.totalSewaMeja.toLocaleString("id-ID")}</span></div>
-                <div className="flex justify-between"><span>- Kantin / F&B</span><span>Rp {modalClosing.reportData.totalKantin.toLocaleString("id-ID")}</span></div>
+                <div className="flex justify-between"><span>- Sewa Meja</span><span>Rp {(modalClosing.reportData.total_sewa_meja || 0).toLocaleString("id-ID")}</span></div>
+                <div className="flex justify-between"><span>- Kantin / F&B</span><span>Rp {(modalClosing.reportData.total_kantin || 0).toLocaleString("id-ID")}</span></div>
               </div>
               <div className="space-y-1.5 border-b border-dashed border-black/60 py-2.5 text-slate-900">
                 <p className="font-bold text-[10px]">[ METODE BAYAR ]</p>
-                <div className="flex justify-between"><span>- Tunai (Cash)</span><span>Rp {modalClosing.reportData.totalTunai.toLocaleString("id-ID")}</span></div>
-                <div className="flex justify-between"><span>- Non-Tunai (QRIS/Trf)</span><span>Rp {modalClosing.reportData.totalNonTunai.toLocaleString("id-ID")}</span></div>
+                <div className="flex justify-between"><span>- Tunai (Cash)</span><span>Rp {(modalClosing.reportData.total_tunai || 0).toLocaleString("id-ID")}</span></div>
+                <div className="flex justify-between"><span>- Non-Tunai (QRIS/Trf)</span><span>Rp {(modalClosing.reportData.total_non_tunai || 0).toLocaleString("id-ID")}</span></div>
               </div>
-              <div className="pt-3 font-black flex justify-between text-sm text-black border-t border-black/20 mt-1"><span>GRAND TOTAL :</span><span>Rp {modalClosing.reportData.grandTotal.toLocaleString("id-ID")}</span></div>
+              <div className="pt-3 font-black flex justify-between text-sm text-black border-t border-black/20 mt-1"><span>GRAND TOTAL :</span><span>Rp {(modalClosing.reportData.grand_total || 0).toLocaleString("id-ID")}</span></div>
               <div className="text-center pt-5 border-t border-dashed border-black/60 mt-4 text-[9px] text-slate-700">
                 <div className="flex justify-between px-1 mt-2"><div>Kasir Bertugas,<br/><br/><br/><br/>( ______________ )</div><div>Manajer / Owner,<br/><br/><br/><br/>( ______________ )</div></div>
               </div>
@@ -447,27 +565,23 @@ export default function KasirDashboard() {
             </div>
           </div>
 
-          {/* PRINT AREA KERTAS THERMAL */}
+          {/* PRINT AREA */}
           <div className="print-only-layout font-mono text-[11px] text-black bg-white p-2 w-[58mm] leading-tight">
+            {/* Konten print sama seperti sebelumnya */}
             <div className="text-center border-b border-dashed border-black pb-2 mb-2"><h3 className="font-bold text-sm">ROYAL CUE BILLIARD</h3><p className="font-bold text-[9px]">LAPORAN CLOSING SHIFT</p></div>
-            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>WAKTU : {modalClosing.reportData.waktu}</div><div>KASIR : {modalClosing.reportData.namaKasir}</div></div>
+            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>WAKTU : {modalClosing.reportData.waktu}</div><div>KASIR : {modalClosing.reportData.nama_kasir}</div></div>
             <div className="space-y-1 border-b border-dashed border-black pb-2">
               <div className="font-bold" style={{ fontSize: '9px' }}>[ SUMBER OMSET ]</div>
-              <div className="flex justify-between"><span>Sewa Meja:</span><span>{modalClosing.reportData.totalSewaMeja.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>Kantin:</span><span>{modalClosing.reportData.totalKantin.toLocaleString("id-ID")}</span></div>
+              <div className="flex justify-between"><span>Sewa Meja:</span><span>{(modalClosing.reportData.total_sewa_meja || 0).toLocaleString("id-ID")}</span></div>
+              <div className="flex justify-between"><span>Kantin:</span><span>{(modalClosing.reportData.total_kantin || 0).toLocaleString("id-ID")}</span></div>
             </div>
-            <div className="space-y-1 border-b border-dashed border-black py-2">
-              <div className="font-bold" style={{ fontSize: '9px' }}>[ METODE BAYAR ]</div>
-              <div className="flex justify-between"><span>Tunai:</span><span>{modalClosing.reportData.totalTunai.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>Non-Tunai:</span><span>{modalClosing.reportData.totalNonTunai.toLocaleString("id-ID")}</span></div>
-            </div>
-            <div className="pt-1.5 font-black flex justify-between text-xs"><span>TOTAL OMSET:</span><span>Rp {modalClosing.reportData.grandTotal.toLocaleString("id-ID")}</span></div>
+            <div className="pt-1.5 font-black flex justify-between text-xs"><span>TOTAL OMSET:</span><span>Rp {(modalClosing.reportData.grand_total || 0).toLocaleString("id-ID")}</span></div>
             <div className="text-center pt-6 mt-4" style={{ fontSize: '10px' }}><div className="flex justify-between"><span>Kasir,</span><span>Owner,</span></div><div className="h-8"></div><div className="flex justify-between"><span>(...........)</span><span>(...........)</span></div></div>
           </div>
         </div>
       )}
 
-      {/* STRUK PREVIEW BELANJA MEJA */}
+      {/* MODAL STRUK */}
       {modalStruk.isOpen && modalStruk.data && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 print-modal-container animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-sm flex flex-col no-print shadow-2xl scale-in">
@@ -477,14 +591,14 @@ export default function KasirDashboard() {
             </div>
             <div className="bg-white text-black p-5 font-mono text-[11px] leading-relaxed rounded-xl shadow-inner max-h-[50vh] overflow-y-auto border border-slate-200">
               <div className="text-center space-y-0.5 border-b border-dashed border-black/60 pb-3 mb-3"><h4 className="font-black text-sm tracking-wide">ROYAL CUE BILLIARD</h4><p className="text-slate-500 text-[10px]">Jl. Utama Biliar No. 88, Kota</p></div>
-              <div className="space-y-1 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800"><div>WAKTU : {modalStruk.data.waktuSelesai}</div><div>ID    : {modalStruk.data.idBooking}</div><div>MEJA  : {modalStruk.data.nomorMeja}</div><div>CUST  : {modalStruk.data.namaPelanggan}</div></div>
+              <div className="space-y-1 mb-3 border-b border-dashed border-black/60 pb-3 text-[10px] text-slate-800"><div>WAKTU : {modalStruk.data.waktu_selesai}</div><div>ID    : {modalStruk.data.idBooking}</div><div>MEJA  : {modalStruk.data.nomor_meja}</div><div>CUST  : {modalStruk.data.nama_pelanggan}</div></div>
               <div className="space-y-1.5 border-b border-dashed border-black/60 pb-3 text-slate-900">
-                <div className="flex justify-between font-bold"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>Rp {modalStruk.data.totalSewa.toLocaleString("id-ID")}</span></div>
-                {modalStruk.data.pesananFB && modalStruk.data.pesananFB.map((item) => (
-                  <div key={item.id} className="pl-2 border-l border-slate-200 mt-1"><div className="flex justify-between text-slate-900"><span>- {item.nama}</span><span>Rp {(item.harga * item.qty).toLocaleString("id-ID")}</span></div><div className="text-[10px] text-slate-500">{item.qty} x Rp {item.harga.toLocaleString("id-ID")}</div></div>
+                <div className="flex justify-between font-bold"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>Rp {(modalStruk.data.total_sewa || 0).toLocaleString("id-ID")}</span></div>
+                {modalStruk.data.pesanan_fb && modalStruk.data.pesanan_fb.map((item, idx) => (
+                  <div key={idx} className="pl-2 border-l border-slate-200 mt-1"><div className="flex justify-between text-slate-900"><span>- {item.nama}</span><span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div><div className="text-[10px] text-slate-500">{item.qty} x Rp {(item.harga || 0).toLocaleString("id-ID")}</div></div>
                 ))}
               </div>
-              <div className="pt-2 font-black space-y-1.5 text-right text-slate-900"><div className="flex justify-between text-black text-sm"><span>TOTAL BILL :</span><span>Rp {modalStruk.data.totalAkhir.toLocaleString("id-ID")}</span></div><div className="flex justify-between text-[10px] text-slate-600 font-medium"><span>METODE PEMBAYARAN:</span><span>{modalStruk.data.metodePembayaran.toUpperCase()}</span></div></div>
+              <div className="pt-2 font-black space-y-1.5 text-right text-slate-900"><div className="flex justify-between text-black text-sm"><span>TOTAL BILL :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div><div className="flex justify-between text-[10px] text-slate-600 font-medium"><span>METODE PEMBAYARAN:</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div></div>
               <div className="text-center pt-4 border-t border-dashed border-black/60 mt-4 text-[10px] text-slate-600 font-bold tracking-widest"><p>--- TERIMA KASIH ---</p></div>
             </div>
             <div className="mt-5 flex gap-2">
@@ -493,23 +607,23 @@ export default function KasirDashboard() {
             </div>
           </div>
 
-          {/* PRINT AREA STRUK BELANJA */}
+          {/* PRINT AREA STRUK */}
           <div className="print-only-layout font-mono text-[11px] text-black bg-white p-2 w-[58mm] leading-tight">
             <div className="text-center border-b border-dashed border-black pb-2 mb-2"><h3 className="font-bold text-sm">ROYAL CUE BILLIARD</h3></div>
-            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>TGL  : {modalStruk.data.waktuSelesai}</div><div>MEJA : {modalStruk.data.nomorMeja}</div><div>CUST : {modalStruk.data.namaPelanggan}</div></div>
+            <div className="space-y-0.5 mb-2 border-b border-dashed border-black pb-2" style={{ fontSize: '10px' }}><div>TGL  : {modalStruk.data.waktu_selesai}</div><div>MEJA : {modalStruk.data.nomor_meja}</div><div>CUST : {modalStruk.data.nama_pelanggan}</div></div>
             <div className="space-y-1 border-b border-dashed border-black pb-2">
-              <div className="flex justify-between"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>{modalStruk.data.totalSewa.toLocaleString("id-ID")}</span></div>
-              {modalStruk.data.pesananFB && modalStruk.data.pesananFB.map((item) => (
-                <div key={item.id}><div className="flex justify-between"><span>{item.nama}</span><span>{(item.harga * item.qty).toLocaleString("id-ID")}</span></div><div style={{ fontSize: '9px', paddingLeft: '5px', color: '#444' }}>{item.qty} x {item.harga.toLocaleString("id-ID")}</div></div>
+              <div className="flex justify-between"><span>Sewa Meja ({modalStruk.data.durasi} Jam)</span><span>{(modalStruk.data.total_sewa || 0).toLocaleString("id-ID")}</span></div>
+              {modalStruk.data.pesanan_fb && modalStruk.data.pesanan_fb.map((item, idx) => (
+                <div key={idx}><div className="flex justify-between"><span>{item.nama}</span><span>{((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div><div style={{ fontSize: '9px', paddingLeft: '5px', color: '#444' }}>{item.qty} x {(item.harga || 0).toLocaleString("id-ID")}</div></div>
               ))}
             </div>
-            <div className="pt-1.5 font-black"><div className="flex justify-between text-xs"><span>TOTAL  :</span><span>Rp {modalStruk.data.totalAkhir.toLocaleString("id-ID")}</span></div><div className="flex justify-between" style={{ fontSize: '10px', fontWeight: 'normal' }}><span>BAYAR  :</span><span>{modalStruk.data.metodePembayaran.toUpperCase()}</span></div></div>
+            <div className="pt-1.5 font-black"><div className="flex justify-between text-xs"><span>TOTAL  :</span><span>Rp {(modalStruk.data.total_akhir || 0).toLocaleString("id-ID")}</span></div><div className="flex justify-between" style={{ fontSize: '10px', fontWeight: 'normal' }}><span>BAYAR  :</span><span>{(modalStruk.data.metode_pembayaran || "").toUpperCase()}</span></div></div>
             <div className="text-center pt-4 border-t border-dashed border-black mt-3" style={{ fontSize: '10px' }}><p>--- TERIMA KASIH ---</p></div>
           </div>
         </div>
       )}
 
-      {/* STYLE CSS UTK PRINTING & ANIMASI MINIMAL */}
+      {/* STYLE CSS */}
       <style>{`
         .print-only-layout { display: none; }
         .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
