@@ -18,7 +18,7 @@ export default function ReservasiPage() {
     meja: "Meja 1"
   });
 
-  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10"];
+  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
 
   const getHargaPerJam = (meja) => {
     return meja.toLowerCase().includes("vip") ? 80000 : 50000;
@@ -31,8 +31,14 @@ export default function ReservasiPage() {
   const handleBooking = async (e) => {
     e.preventDefault();
     
-    if (!form.nama.trim()) return alert("Masukkan nama!");
-    if (!form.nohp.trim()) return alert("Masukkan nomor WhatsApp!");
+    if (!form.nama.trim()) {
+      alert("Masukkan nama lengkap!");
+      return;
+    }
+    if (!form.nohp.trim()) {
+      alert("Masukkan nomor WhatsApp!");
+      return;
+    }
 
     setLoading(true);
 
@@ -40,13 +46,18 @@ export default function ReservasiPage() {
       const idBooking = "RC-" + Date.now().toString().slice(-8);
       const idNumerik = Date.now();
 
-      // DATA MINIMAL - HANYA FIELD YANG PASTI ADA
       const dataPesanan = {
         id: idNumerik,
-        nomorMeja: form.meja,
-        namaPelanggan: form.nama.trim(),
-        statusPemesanan: "Pending",
-        durasiBermain: Number(form.durasi)
+        id_booking: idBooking,
+        nomor_meja: form.meja,
+        nama_pelanggan: form.nama.trim(),
+        status_pemesanan: "Pending",
+        durasi_bermain: Number(form.durasi),
+        tanggal_main: form.tanggal,
+        jam_mulai: form.jam,
+        no_whatsapp: form.nohp,
+        pesanan_fb: [],
+        created_at: new Date().toISOString()
       };
 
       console.log("Menyimpan data:", dataPesanan);
@@ -56,11 +67,7 @@ export default function ReservasiPage() {
         .insert([dataPesanan])
         .select();
 
-      if (error) {
-        console.error("Supabase error:", error);
-        alert("Error: " + error.message);
-        return;
-      }
+      if (error) throw error;
 
       console.log("Berhasil:", data);
       setBookingId(idBooking);
@@ -124,12 +131,12 @@ export default function ReservasiPage() {
             <label className="text-[11px] font-bold text-[#00ff99]">DURASI (JAM)</label>
             <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
               <button type="button" onClick={() => setForm({...form, durasi: Math.max(1, form.durasi - 1)})}
-                className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-lg text-xl font-bold cursor-pointer transition">
+                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer transition hover:bg-slate-700">
                 -
               </button>
               <span className="font-bold"><FaClock className="inline mr-2 text-[#00ff99]" />{form.durasi} Jam</span>
               <button type="button" onClick={() => setForm({...form, durasi: form.durasi + 1})}
-                className="w-10 h-10 bg-slate-800 hover:bg-slate-700 rounded-lg text-xl font-bold cursor-pointer transition">
+                className="w-10 h-10 bg-slate-800 rounded-lg text-xl font-bold cursor-pointer transition hover:bg-slate-700">
                 +
               </button>
             </div>
