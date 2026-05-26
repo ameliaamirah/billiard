@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { FaBars, FaTimes } from "react-icons/fa";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faBars, faTimes } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
 
 const Navbar = () => {
@@ -78,8 +79,11 @@ const Navbar = () => {
         </nav>
 
         {/* MOBILE TOGGLE BUTTON */}
-        <button className="md:hidden text-xl text-white cursor-pointer z-[110] p-1" onClick={() => setMenuOpen(!menuOpen)}>
-          {menuOpen ? <FaTimes /> : <FaBars />}
+        <button 
+          className="md:hidden text-xl text-white cursor-pointer z-[110] p-1" 
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          <FontAwesomeIcon icon={menuOpen ? faTimes : faBars} />
         </button>
       </div>
 
@@ -115,13 +119,12 @@ const Navbar = () => {
           ))}
         </div>
 
-        {/* AREA BAWAH: TEKS FOOTER DIPAKSA MENETAP DI BAWAH LAYAR HP */}
+        {/* AREA BAWAH */}
         <div className="px-6 pb-15 pt-4 border-t border-slate-800/40 bg-[#070a13]">
           <p className="text-[10px] tracking-widest text-slate-500 font-bold uppercase">
             © 2026 ROYAL CUE STUDIO
           </p>
         </div>
-
       </div>
     </header>
   );

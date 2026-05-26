@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaTv, FaCalculator, FaSignOutAlt } from "react-icons/fa";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTv, faCalculator, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 
 import MonitorKasir from "./MonitorKasir"; 
 import KasirDashboard from "./KasirDashboard"; 
@@ -19,8 +20,8 @@ export default function DashboardUtamaKasir() {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
       
-      {/* NAVBAR TOP: Responsif dari kolom ke baris */}
-      <nav className="bg-slate-900 border-b border-slate-800 px-4 md:px-6 py-3.5 md:py-4 fixed top-0 w-full z-50 flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-center">
+      {/* NAVBAR TOP */}
+      <nav className="bg-slate-900 border-b border-slate-800 px-4 md:px-6 py-3.5 md:py-4 fixed top-0 w-full z-50 flex flex-col sm:flex-row gap-3 sm:gap-0 justify-between items-center shadow-2xl">
         <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-8 w-full sm:w-auto">
           <h1 className="text-base md:text-xl font-black tracking-tight text-white text-center sm:text-left">
             ROYAL CUE <span className="text-[#00ff99]">KASIR HUB</span>
@@ -36,7 +37,7 @@ export default function DashboardUtamaKasir() {
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              <FaTv /> Monitor
+              <FontAwesomeIcon icon={faTv} /> Monitor
             </button>
             <button
               onClick={() => setTabAktif("billing")}
@@ -46,7 +47,7 @@ export default function DashboardUtamaKasir() {
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              <FaCalculator /> Billing Meja
+              <FontAwesomeIcon icon={faCalculator} /> Billing Meja
             </button>
           </div>
         </div>
@@ -56,15 +57,14 @@ export default function DashboardUtamaKasir() {
           onClick={handleLogout}
           className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 bg-rose-600/10 hover:bg-rose-600 border border-rose-500/20 hover:border-rose-500 text-rose-400 hover:text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
         >
-          <FaSignOutAlt /> Keluar
+          <FontAwesomeIcon icon={faSignOutAlt} /> Keluar
         </button>
       </nav>
 
-      {/* KONTEN UTAMA: Jarak atas otomatis melar jika dibuka di HP */}
+      {/* KONTEN UTAMA */}
       <div className="flex-1 pt-40 sm:pt-24 px-4 md:px-6 pb-6 bg-slate-950">
         {tabAktif === "monitor" ? <MonitorKasir /> : <KasirDashboard />}
       </div>
-
     </div>
   );
 }

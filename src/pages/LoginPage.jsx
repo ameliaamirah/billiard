@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { 
+  faUser, faLock, faEye, faEyeSlash, faCrown, faSpinner, faArrowRight 
+} from "@fortawesome/free-solid-svg-icons";
 
 export default function LoginPage({ roleLogin }) {
   const navigate = useNavigate();
@@ -13,117 +16,111 @@ export default function LoginPage({ roleLogin }) {
     e.preventDefault();
     setLoading(true);
 
-    // 🕵️ SIMULASI VALIDASI AKUN DEMO LANGSUNG DI FRONTEND (MURNI LOKAL)
     setTimeout(() => {
       const validUsers = [
         { username: "admin", password: "admin123", role: "admin" },
         { username: "kasir", password: "kasir123", role: "kasir" }
       ];
 
-      // Mencari kecocokan data input dengan akun demo
       const userFound = validUsers.find(
         (u) => u.username === username.toLowerCase() && u.password === password
       );
 
       if (userFound) {
         setLoading(false);
-        
-        // Simpan penanda sesi masuk tiruan ke browser agar aman
         localStorage.setItem("token", "simulated_frontend_token_xyz123");
         localStorage.setItem("role", userFound.role);
         localStorage.setItem("username", userFound.username);
         
-        // Mengarahkan ke rute dashboard sesuai hak akses akun
-        if (userFound.role === "admin") {
-          navigate("/admin-dashboard");
-        } else {
-          navigate("/kasir-dashboard");
-        }
+        navigate(userFound.role === "admin" ? "/admin-dashboard" : "/kasir-dashboard");
       } else {
         setLoading(false);
-        // Alert penolakan rapi tanpa pesan error backend yang membingungkan
         alert(`Gagal Login: Username atau password untuk ${roleLogin} tidak sesuai.`);
       }
-    }, 600); // Memberikan efek jeda loading halus seolah-olah memproses data
+    }, 1000);
   };
 
   return (
-    <div className="min-h-screen bg-[#060b13] flex flex-col items-center justify-center px-4 font-sans">
-      <div className="text-center mb-6">
-        <div className="text-amber-400 text-3xl mb-3 flex justify-center">
-          👑
-        </div>
-        <h2 className="text-[11px] font-bold tracking-[0.25em] text-slate-400 uppercase mb-1">
-          Royal Cue Studio
-        </h2>
-        <h1 className="text-2xl font-black text-white tracking-wide capitalize">
-          Login {roleLogin}
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Masuk ke dashboard {roleLogin}
-        </p>
+    <div className="min-h-screen bg-[#020608] flex items-center justify-center p-4 selection:bg-[#00ff99]/30">
+      {/* Dekorasi Background */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-[#00ff99]/10 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[10%] right-[10%] w-[30%] h-[30%] bg-blue-500/10 blur-[120px] rounded-full"></div>
       </div>
 
-      <div className="w-full max-w-sm bg-[#0f172a]/90 border border-slate-800/60 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Username</label>
-            <div className="relative flex items-center">
-              <FaUser className="absolute left-4 text-slate-500 text-xs" />
-              <input
-                type="text"
-                placeholder={`Masukkan username ${roleLogin}...`}
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 rounded-xl text-white outline-none text-sm transition-all"
-              />
-            </div>
+      <div className="w-full max-w-sm z-10">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#00ff99] to-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#00ff99]/20">
+            <FontAwesomeIcon icon={faCrown} className="text-white text-2xl" />
           </div>
+          <h2 className="text-[10px] font-black tracking-[0.3em] text-emerald-500 uppercase mb-1">Royal Cue Studio</h2>
+          <h1 className="text-3xl font-black text-white tracking-tight">Login {roleLogin}</h1>
+        </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Password</label>
-            <div className="relative flex items-center">
-              <FaLock className="absolute left-4 text-slate-500 text-xs" />
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#1e293b]/70 border border-slate-800 focus:border-emerald-500/80 p-3.5 pl-11 pr-11 rounded-xl text-white outline-none text-sm transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
-              >
-                {showPassword ? <FaEyeSlash className="text-xs" /> : <FaEye className="text-xs" />}
-              </button>
+        <div className="bg-[#0a0f0d]/80 border border-slate-800 backdrop-blur-2xl rounded-3xl p-8 shadow-2xl">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Username</label>
+              <div className="relative group">
+                <FontAwesomeIcon icon={faUser} className="absolute left-4 top-4 text-slate-600 group-focus-within:text-[#00ff99] transition-colors" />
+                <input
+                  type="text"
+                  placeholder="admin"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-slate-800 focus:border-[#00ff99] p-3.5 pl-12 rounded-xl text-white outline-none text-sm transition-all placeholder:text-slate-700"
+                />
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#4ade80] hover:bg-[#2ecc71] text-[#060b13] font-bold text-sm py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] cursor-pointer shadow-lg shadow-emerald-500/10 mt-2 disabled:opacity-50"
-          >
-            {loading ? "Memproses..." : `Login ${roleLogin}`}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-5 border-t border-slate-800/80">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-            Demo Login
-          </p>
-          <div className="space-y-1 bg-[#1e293b]/40 border border-slate-800/40 p-3 rounded-xl text-xs text-slate-400">
-            <div className="flex justify-between items-center">
-              <span>Admin:</span>
-              <span className="font-mono text-slate-300 select-all">admin / admin123</span>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Password</label>
+              <div className="relative group">
+                <FontAwesomeIcon icon={faLock} className="absolute left-4 top-4 text-slate-600 group-focus-within:text-[#00ff99] transition-colors" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-slate-800 focus:border-[#00ff99] p-3.5 pl-12 pr-12 rounded-xl text-white outline-none text-sm transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-4 text-slate-600 hover:text-white transition-colors"
+                >
+                  <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
+                </button>
+              </div>
             </div>
-            <div className="flex justify-between items-center">
-              <span>Kasir:</span>
-              <span className="font-mono text-slate-300 select-all">kasir / kasir123</span>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-[#00ff99] to-emerald-600 hover:from-[#00dd88] hover:to-emerald-500 text-black font-black text-sm py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-[#00ff99]/10 mt-2"
+            >
+              {loading ? (
+                <><FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> Memproses...</>
+              ) : (
+                <>MASUK KE DASHBOARD <FontAwesomeIcon icon={faArrowRight} className="ml-2" /></>
+              )}
+            </button>
+          </form>
+
+          {/* Info Demo Login */}
+          <div className="mt-8 pt-6 border-t border-slate-800/50">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-3 text-center">Akun Demo</p>
+            <div className="grid grid-cols-1 gap-2">
+              <div className="flex justify-between bg-slate-950/30 p-2.5 rounded-lg border border-slate-800/50">
+                <span className="text-[10px] font-bold text-slate-400">Admin</span>
+                <span className="text-[10px] font-mono text-emerald-500">admin / admin123</span>
+              </div>
+              <div className="flex justify-between bg-slate-950/30 p-2.5 rounded-lg border border-slate-800/50">
+                <span className="text-[10px] font-bold text-slate-400">Kasir</span>
+                <span className="text-[10px] font-mono text-blue-500">kasir / kasir123</span>
+              </div>
             </div>
           </div>
         </div>

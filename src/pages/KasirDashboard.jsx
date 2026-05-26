@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { Search, Coffee, History, LayoutDashboard, Trash2, Printer, X, MoveHorizontal, Lock } from "lucide-react"; 
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { 
+  faSearch, faCoffee, faHistory, faTrash, faPrint, 
+  faTimes, faExchangeAlt, faLock, faPlay, faStop, 
+  faUser, faClock, faMoneyBillWave, faCheck,
+  faReceipt, faHourglassHalf, faPlusCircle
+} from "@fortawesome/free-solid-svg-icons";
 import FandBModal from "../components/FandBModal"; 
 import { supabase } from "../supabaseClient";
 
@@ -9,6 +15,7 @@ export default function KasirDashboard() {
   const [filterAktif, setFilterAktif] = useState("Semua"); 
   const [cariNama, setCariNama] = useState("");
   const [loading, setLoading] = useState(false);
+  const [timerUpdate, setTimerUpdate] = useState(0); // Untuk force update timer
 
   const [modalFB, setModalFB] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pesananSaatIni: [] });
   const [modalStruk, setModalStruk] = useState({ isOpen: false, data: null });
@@ -43,7 +50,7 @@ export default function KasirDashboard() {
       
     } catch (error) {
       console.error("Error:", error);
-      alert("Gagal memuat data: " + error.message);
+      alert("Gagal memuat数据: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -68,11 +75,73 @@ export default function KasirDashboard() {
       )
       .subscribe();
     
+    // Timer untuk update setiap detik
+    const interval = setInterval(() => {
+      setTimerUpdate(prev => prev + 1);
+    }, 1000);
+    
     return () => {
       supabase.removeChannel(channelReservasi);
       supabase.removeChannel(channelRiwayat);
+      clearInterval(interval);
     };
   }, []);
+
+  // Hitung endTime dan sisa waktu
+  const getEndTime = (jamMulai, durasiJam) => {
+    if (!jamMulai || jamMulai === "-" || !durasiJam) return null;
+    const [hours, minutes] = jamMulai.split(":").map(Number);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
+    return startDate.getTime() + (durasiJam * 3600000);
+  };
+
+  const getTimeLeft = (endTime) => {
+    if (!endTime) return null;
+    return Math.max(0, endTime - Date.now());
+  };
+
+  const formatTimeLeft = (ms) => {
+    if (!ms && ms !== 0) return "00:00:00";
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  // Fungsi Extend Waktu (Tambah Jam)
+  const extendWaktu = async (id, jamMulai, durasiSaatIni) => {
+    const tambahJam = prompt("Masukkan tambahan jam (1-4 jam):", "1");
+    if (!tambahJam) return;
+    
+    const jamTambahan = parseInt(tambahJam);
+    if (isNaN(jamTambahan) || jamTambahan < 1 || jamTambahan > 4) {
+      alert("Tambahan jam harus antara 1-4 jam!");
+      return;
+    }
+    
+    const durasiBaru = durasiSaatIni + jamTambahan;
+    const hargaPerJam = getHargaPerJam(jamMulai);
+    const biayaTambahan = jamTambahan * hargaPerJam;
+    
+    if (window.confirm(`Tambah ${jamTambahan} jam (${jamTambahan} x Rp ${hargaPerJam.toLocaleString("id-ID")} = Rp ${biayaTambahan.toLocaleString("id-ID")})?`)) {
+      try {
+        // Update durasi di database
+        const { error } = await supabase
+          .from("reservasi_billiard")
+          .update({ durasi_bermain: durasiBaru })
+          .eq("id", id);
+        
+        if (error) throw error;
+        
+        await fetchData();
+        alert(`✅ Waktu bermain berhasil ditambah ${jamTambahan} jam!`);
+      } catch (error) {
+        console.error("Error:", error);
+        alert("Gagal menambah waktu: " + error.message);
+      }
+    }
+  };
 
   const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB, durasi, itemFB) => {
     console.log("===== UBAH STATUS MEJA =====");
@@ -92,6 +161,20 @@ export default function KasirDashboard() {
         const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
         const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
 
+        const transaksiStruk = {
+          noStruk: "RC-" + String(id).slice(-8),
+          tanggal: `${tanggalHariIni} ${jamSelesai}`,
+          kasir: "Kasir",
+          meja: nomorMeja,
+          pelanggan: namaPelanggan,
+          durasi: durasi,
+          hargaSewa: Number(totalSewa || 0),
+          itemsFB: itemFB || [],
+          totalFB: Number(totalFB || 0),
+          totalAkhir: totalAkhirSemua,
+          metode: metode.toLowerCase()
+        };
+
         const dataStrukBaru = {
           id_booking: "RC-" + String(id).slice(-8),
           nomor_meja: nomorMeja,
@@ -106,38 +189,24 @@ export default function KasirDashboard() {
           created_at: new Date().toISOString()
         };
 
-        console.log("Menyimpan ke riwayat:", dataStrukBaru);
-
         const { error: insertError } = await supabase
           .from("riwayat_transaksi")
           .insert([dataStrukBaru]);
         
-        if (insertError) {
-          console.error("Error insert:", insertError);
-          throw insertError;
-        }
-
-        console.log("Berhasil simpan ke riwayat");
+        if (insertError) throw insertError;
 
         const { error: deleteError } = await supabase
           .from("reservasi_billiard")
           .delete()
           .eq("id", id);
         
-        if (deleteError) {
-          console.error("Error delete:", deleteError);
-          throw deleteError;
-        }
+        if (deleteError) throw deleteError;
 
-        console.log("Berhasil hapus dari reservasi");
-
-        setModalStruk({ isOpen: true, data: dataStrukBaru });
+        setModalStruk({ isOpen: true, data: transaksiStruk });
         await fetchData();
         alert("✅ Transaksi berhasil!");
 
       } else if (statusBaru === "Playing") {
-        console.log("Update status menjadi Playing...");
-        
         const { error: updateError } = await supabase
           .from("reservasi_billiard")
           .update({ 
@@ -146,12 +215,8 @@ export default function KasirDashboard() {
           })
           .eq("id", id);
         
-        if (updateError) {
-          console.error("Error update:", updateError);
-          throw updateError;
-        }
+        if (updateError) throw updateError;
         
-        console.log("Berhasil update status");
         await fetchData();
         alert("✅ Status berhasil diubah menjadi Playing!");
       }
@@ -179,25 +244,30 @@ export default function KasirDashboard() {
   };
 
   const tanganiPindahMeja = async (idMejaAsal, nomorMejaAsal) => {
+    if (!idMejaAsal) {
+      alert("Data meja tidak valid!");
+      return;
+    }
+    
     try {
       const semuaNomorMejaTerpakai = daftarMeja
-        .filter(m => m.status_pemesanan === "Playing")
-        .map(m => m.nomor_meja || "").map(n => n.toLowerCase());
+        .filter(m => (m.status_pemesanan === "Playing" || m.status_pemesanan === "Disetujui") && m.id !== idMejaAsal)
+        .map(m => m.nomor_meja || "").filter(n => n).map(n => n.toLowerCase());
       
       const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
       const mejaTersedia = daftarSemuaMeja.filter(noMeja => !semuaNomorMejaTerpakai.includes(noMeja.toLowerCase()));
 
       if (mejaTersedia.length === 0) {
-        alert("⚠️ Semua meja terisi!");
+        alert("⚠️ Semua meja terisi! Tidak ada meja kosong untuk dipindah.");
         return;
       }
 
-      const inputMejaBaru = prompt(`Pindah dari ${nomorMejaAsal}\nMeja tersedia: ${mejaTersedia.join(", ")}\n\nMeja baru:`);
+      const inputMejaBaru = prompt(`Pindah dari ${nomorMejaAsal}\nMeja tersedia: ${mejaTersedia.join(", ")}\n\nMasukkan nomor meja tujuan:`);
       if (!inputMejaBaru) return;
 
       const mejaTujuanValid = mejaTersedia.find(m => m.toLowerCase() === inputMejaBaru.trim().toLowerCase());
       if (!mejaTujuanValid) {
-        alert("⚠️ Meja tidak tersedia!");
+        alert("⚠️ Meja tidak tersedia! Silakan pilih dari daftar yang tersedia.");
         return;
       }
 
@@ -207,10 +277,12 @@ export default function KasirDashboard() {
         .eq("id", idMejaAsal);
       
       if (error) throw error;
+      
       await fetchData();
-      alert(`✅ Pindah ke ${mejaTujuanValid}`);
+      alert(`✅ Berhasil pindah dari ${nomorMejaAsal} ke ${mejaTujuanValid}`);
     } catch (error) {
-      alert("Gagal: " + error.message);
+      console.error("Error:", error);
+      alert("Gagal memindahkan meja: " + error.message);
     }
   };
 
@@ -268,17 +340,33 @@ export default function KasirDashboard() {
   };
 
   const simpanPesananKantin = async (id, keranjangBaru) => {
-    try {
-      const { error } = await supabase
-        .from("reservasi_billiard")
-        .update({ pesanan_fb: keranjangBaru })
-        .eq("id", id);
-      if (error) throw error;
-      await fetchData();
-      alert("✅ Pesanan disimpan");
+  console.log("🍽️ Menyimpan pesanan kantin:", { id, keranjangBaru });
+  
+  if (!id) {
+    alert("ID Meja tidak valid!");
+    return false;
+  }
+  
+  try {
+    const { error } = await supabase
+      .from("reservasi_billiard")
+      .update({ pesanan_fb: keranjangBaru })
+      .eq("id", id);
+    
+    if (error) throw error;
+    
+    await fetchData();
+    alert("✅ Pesanan berhasil disimpan!");
+    return true;
     } catch (error) {
-      alert("Gagal: " + error.message);
+      console.error("Error:", error);
+      alert("Gagal menyimpan pesanan: " + error.message);
+      return false;
     }
+  };
+
+  const handlePrintStruk = () => {
+    window.print();
   };
 
   const mejaTerfilter = daftarMeja.filter((meja) => {
@@ -322,12 +410,17 @@ export default function KasirDashboard() {
               onClick={tanganiClosingShift}
               className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
             >
-              <Lock size={14} /> Tutup Shift
+              <FontAwesomeIcon icon={faLock} size={14} /> Tutup Shift
             </button>
 
-            <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-4 py-2 rounded-xl">
-              <p className="text-[9px] text-slate-400 uppercase font-bold">Omset Shift Aktif</p>
-              <p className="text-lg font-black text-emerald-400">Rp {totalOmsetHariIni.toLocaleString("id-ID")}</p>
+            <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-4 py-2 rounded-xl min-w-[140px]">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <FontAwesomeIcon icon={faMoneyBillWave} className="text-emerald-400 text-[11px]" />
+                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Omset Shift</p>
+              </div>
+              <p className="text-base md:text-lg font-black text-emerald-400 text-right">
+                Rp {totalOmsetHariIni.toLocaleString("id-ID")}
+              </p>
             </div>
           </div>
         </div>
@@ -335,7 +428,7 @@ export default function KasirDashboard() {
         {/* TOOLBAR */}
         <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 p-3 rounded-2xl flex flex-col lg:flex-row gap-3 justify-between items-center mt-6">
           <div className="relative w-full lg:max-w-md">
-            <Search className="absolute left-3 top-3 text-slate-500" size={14} />
+            <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-3 text-slate-500" size={14} />
             <input 
               type="text" 
               placeholder="Cari meja atau pelanggan..." 
@@ -355,7 +448,7 @@ export default function KasirDashboard() {
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
                 }`}
               >
-                {tab === "Riwayat" ? <History size={12} className="inline mr-1" /> : tab}
+                {tab === "Riwayat" ? <FontAwesomeIcon icon={faHistory} size={12} className="inline mr-1" /> : tab}
               </button>
             ))}
           </div>
@@ -367,7 +460,7 @@ export default function KasirDashboard() {
         {filterAktif === "Riwayat" ? (
           <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl overflow-hidden">
             <div className="p-3 bg-slate-950/40 border-b border-slate-800 text-xs font-bold text-slate-400">
-              📋 Laporan Transaksi Selesai ({riwayatTerfilter.length})
+              <FontAwesomeIcon icon={faHistory} size={12} className="inline mr-1" /> Laporan Transaksi Selesai ({riwayatTerfilter.length})
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -398,10 +491,24 @@ export default function KasirDashboard() {
                         <td className="p-3 font-bold text-emerald-400 text-sm">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
                         <td className="p-3 text-center">
                           <button 
-                            onClick={() => setModalStruk({ isOpen: true, data: item })} 
+                            onClick={() => {
+                              const strukData = {
+                                noStruk: item.id_booking,
+                                tanggal: item.waktu_selesai,
+                                meja: item.nomor_meja,
+                                pelanggan: item.nama_pelanggan,
+                                durasi: item.durasi,
+                                hargaSewa: item.total_sewa,
+                                itemsFB: item.pesanan_fb || [],
+                                totalFB: item.total_fb,
+                                totalAkhir: item.total_akhir,
+                                metode: item.metode_pembayaran
+                              };
+                              setModalStruk({ isOpen: true, data: strukData });
+                            }} 
                             className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-all"
                           >
-                            <Printer size={12} />
+                            <FontAwesomeIcon icon={faPrint} size={12} />
                           </button>
                         </td>
                       </tr>
@@ -426,15 +533,32 @@ export default function KasirDashboard() {
                 const pesananFB = meja.pesanan_fb || [];
                 const jamMulai = meja.jam_mulai || "-";
                 const idBooking = meja.id_booking || ("RC-" + String(meja.id).slice(-5));
+                const isPlaying = statusSekarang === "Playing";
                 
                 const totalBelanjaFB = (pesananFB || []).reduce((acc, curr) => acc + ((curr.harga || 0) * (curr.qty || 1)), 0);
                 const hargaPerJam = getHargaPerJam(nomorMeja);
                 const totalBiayaSewa = durasiBermain * hargaPerJam;
                 const totalTagihan = totalBiayaSewa + totalBelanjaFB;
-                const isPlaying = statusSekarang === "Playing";
+                
+                // Hitung timer
+                const endTime = getEndTime(jamMulai, durasiBermain);
+                const timeLeft = getTimeLeft(endTime);
+                const formattedTime = formatTimeLeft(timeLeft);
+                const isExpiring = isPlaying && timeLeft > 0 && timeLeft < 600000;
+                const isExpired = isPlaying && timeLeft <= 0;
 
                 return (
-                  <div key={meja.id} className="bg-slate-900/60 border rounded-2xl p-5 relative overflow-hidden hover:border-emerald-500/50 transition-all duration-300">
+                  <div key={meja.id} className={`bg-slate-900/60 border rounded-2xl p-5 relative overflow-hidden hover:border-emerald-500/50 transition-all duration-300 ${
+                    isExpired ? "bg-red-950/30 border-red-500/50" : 
+                    isExpiring ? "bg-amber-950/30 border-amber-500/50 animate-pulse" : 
+                    isPlaying ? "border-sky-500/30" : "border-slate-800"
+                  }`}>
+                    {/* Progress Bar */}
+                    {isPlaying && !isExpired && endTime && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" 
+                           style={{ width: `${(timeLeft / (durasiBermain * 3600000)) * 100}%` }} />
+                    )}
+                    
                     <div className={`absolute top-0 left-0 right-0 h-1 ${isPlaying ? "bg-gradient-to-r from-sky-400 to-indigo-500" : "bg-gradient-to-r from-amber-400 to-orange-500"}`} />
                     
                     <div className="flex justify-between items-start mb-3">
@@ -443,45 +567,73 @@ export default function KasirDashboard() {
                         <p className="text-slate-500 text-[9px] font-mono">ID: {idBooking}</p>
                       </div>
                       <div className="flex gap-1.5">
+                        {/* Tombol Pindah Meja */}
                         <button 
-                          disabled={!isPlaying} 
                           onClick={() => tanganiPindahMeja(meja.id, nomorMeja)} 
-                          className={`p-1.5 rounded-lg border transition-all ${isPlaying ? "bg-purple-500/20 border-purple-500/30 text-purple-400 cursor-pointer hover:bg-purple-500/30" : "bg-slate-800/20 border-slate-800 text-slate-600 cursor-not-allowed"}`}
+                          className="p-1.5 rounded-lg border transition-all bg-purple-500/20 border-purple-500/30 text-purple-400 cursor-pointer hover:bg-purple-500/30 hover:scale-105"
                           title="Pindah Meja"
                         >
-                          <MoveHorizontal size={13} />
+                          <FontAwesomeIcon icon={faExchangeAlt} size={13} />
                         </button>
+                        
+                        {/* Tombol Order Makanan */}
                         <button 
-                          disabled={!isPlaying} 
-                          onClick={() => setModalFB({ isOpen: true, mejaId: meja.id, nomorMeja: nomorMeja, pesananSaatIni: pesananFB })} 
-                          className={`p-1.5 rounded-lg border transition-all ${isPlaying ? "bg-amber-500/20 border-amber-500/30 text-amber-400 cursor-pointer hover:bg-amber-500/30" : "bg-slate-800/20 border-slate-800 text-slate-600 cursor-not-allowed"}`}
+                          onClick={() => {
+                            setModalFB({ 
+                              isOpen: true, 
+                              mejaId: meja.id, 
+                              nomorMeja: nomorMeja, 
+                              pesananSaatIni: pesananFB 
+                            });
+                          }} 
+                          className="p-1.5 rounded-lg border transition-all bg-amber-500/20 border-amber-500/30 text-amber-400 cursor-pointer hover:bg-amber-500/30 hover:scale-105"
                           title="Order Makanan"
                         >
-                          <Coffee size={13} />
+                          <FontAwesomeIcon icon={faCoffee} size={13} />
                         </button>
                       </div>
                     </div>
                     
                     <div className="space-y-1.5 text-[11px] border-y border-slate-800/60 py-2.5 my-2.5">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">👤 Pelanggan:</span>
+                        <span className="text-slate-400"><FontAwesomeIcon icon={faUser} size={10} className="mr-1" /> Pelanggan:</span>
                         <span className="font-bold text-white">{namaPelanggan}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">⏱️ Durasi:</span>
+                        <span className="text-slate-400"><FontAwesomeIcon icon={faClock} size={10} className="mr-1" /> Durasi:</span>
                         <span className="font-semibold text-slate-100">{durasiBermain} Jam</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">🕒 Jam Mulai:</span>
                         <span className="font-mono text-emerald-400">{jamMulai}</span>
                       </div>
+                      
+                      {/* Timer dan Tombol Extend */}
+                      {isPlaying && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400"><FontAwesomeIcon icon={faHourglassHalf} size={10} className="mr-1" /> Sisa Waktu:</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-mono font-bold ${isExpiring ? "text-amber-400 animate-pulse" : "text-emerald-400"}`}>
+                              {formattedTime}
+                            </span>
+                            <button 
+                              onClick={() => extendWaktu(meja.id, nomorMeja, durasiBermain)}
+                              className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/40 rounded-lg text-emerald-400 text-[9px] font-bold transition-all flex items-center gap-0.5"
+                              title="Tambah Waktu"
+                            >
+                              <FontAwesomeIcon icon={faPlusCircle} size={8} /> Extend
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="flex justify-between">
-                        <span className="text-slate-400">💰 Sewa:</span>
+                        <span className="text-slate-400"><FontAwesomeIcon icon={faMoneyBillWave} size={10} className="mr-1" /> Sewa:</span>
                         <span className="font-semibold text-emerald-400">Rp {totalBiayaSewa.toLocaleString("id-ID")}</span>
                       </div>
                       {totalBelanjaFB > 0 && (
                         <div className="flex justify-between text-amber-400 bg-amber-500/10 p-1.5 rounded-lg">
-                          <span>🍽️ Makanan:</span>
+                          <span><FontAwesomeIcon icon={faCoffee} size={10} className="mr-1" /> Makanan:</span>
                           <span className="font-bold">Rp {totalBelanjaFB.toLocaleString("id-ID")}</span>
                         </div>
                       )}
@@ -499,31 +651,26 @@ export default function KasirDashboard() {
                             onClick={() => ubahStatusMeja(meja.id, "Playing", namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
                             className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all active:scale-95"
                           >
-                            ▶️ START MAIN
+                            <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
                           </button>
                           <button 
                             onClick={() => batalkanBookingPending(meja.id, nomorMeja, namaPelanggan)} 
                             className="px-3 bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/30 transition-all"
+                            title="Batalkan"
                           >
-                            <Trash2 size={13} />
+                            <FontAwesomeIcon icon={faTrash} size={13} />
                           </button>
                         </>
                       ) : (
                         <>
                           <button disabled className="flex-1 bg-slate-800/50 text-slate-600 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-not-allowed">
-                            ▶️ START MAIN
+                            <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
                           </button>
                           <button 
-                            onClick={() => {
-                              console.log("🔴 STOP & BAYAR button clicked!");
-                              console.log("Meja ID:", meja.id);
-                              console.log("Nama:", namaPelanggan);
-                              console.log("Total biaya sewa:", totalBiayaSewa);
-                              ubahStatusMeja(meja.id, "Selesai", namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB);
-                            }} 
-                            className="flex-1 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 cursor-pointer active:scale-95"
+                            onClick={() => ubahStatusMeja(meja.id, "Selesai", namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
+                            className={`flex-1 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all ${isExpired ? "bg-red-600 hover:bg-red-500" : "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500"} cursor-pointer active:scale-95`}
                           >
-                            ⏹️ STOP & BAYAR
+                            <FontAwesomeIcon icon={faStop} size={10} className="mr-1" /> STOP & BAYAR
                           </button>
                         </>
                       )}
@@ -548,12 +695,12 @@ export default function KasirDashboard() {
 
       {/* MODAL CLOSING SHIFT */}
       {modalClosing.isOpen && modalClosing.reportData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 no-print">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl max-w-sm w-full">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
               <span className="text-purple-400 font-bold text-xs">X-REPORT CLOSING</span>
               <button onClick={() => setModalClosing({ isOpen: false, reportData: null })} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={16} />
+                <FontAwesomeIcon icon={faTimes} size={16} />
               </button>
             </div>
             <div className="bg-white text-black p-3 font-mono text-[10px] rounded-xl">
@@ -574,66 +721,121 @@ export default function KasirDashboard() {
               </div>
             </div>
             <div className="mt-3 flex flex-col gap-2">
-              <button onClick={() => window.print()} className="py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-xs font-bold cursor-pointer">🖨️ Cetak</button>
-              <button onClick={selesaikanClosingDanReset} className="py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold cursor-pointer">✅ Selesai & Reset</button>
+              <button onClick={() => window.print()} className="py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-xs font-bold cursor-pointer">
+                <FontAwesomeIcon icon={faPrint} size={12} className="mr-1" /> Cetak
+              </button>
+              <button onClick={selesaikanClosingDanReset} className="py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold cursor-pointer">
+                <FontAwesomeIcon icon={faCheck} size={12} className="mr-1" /> Selesai & Reset
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL STRUK */}
+      {/* MODAL STRUK PEMBAYARAN */}
       {modalStruk.isOpen && modalStruk.data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl max-w-sm w-full">
-            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
-              <span className="text-slate-400 font-bold text-xs">STRUK PEMBAYARAN</span>
-              <button onClick={() => setModalStruk({ isOpen: false, data: null })} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={16} />
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 no-print">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            
+            <div className="p-6 text-center border-b border-slate-800">
+              <FontAwesomeIcon icon={faReceipt} className="text-[#00ff99] text-3xl mb-3" />
+              <h3 className="text-white font-bold uppercase tracking-widest text-sm">Pembayaran Berhasil</h3>
+            </div>
+
+            <div id="thermal-receipt" className="bg-white p-6 text-black font-mono text-[11px] leading-tight mx-auto my-2 shadow-inner max-w-[280px] rounded-xl">
+              <div className="text-center mb-3">
+                <h2 className="font-bold text-sm uppercase">Royal Cue Studio</h2>
+                <p className="text-[9px]">Jl. Jawa No. 10, Banyuwangi</p>
+                <p className="text-[9px]">WA: 0812-3456-7890</p>
+                <p className="border-t border-dashed border-black/30 my-2"></p>
+              </div>
+
+              <div className="mb-3 space-y-0.5">
+                <p>No: {modalStruk.data.noStruk}</p>
+                <p>Tgl: {modalStruk.data.tanggal}</p>
+                <p>Meja: {modalStruk.data.meja}</p>
+                <p>Pel: {modalStruk.data.pelanggan}</p>
+                <p>Durasi: {modalStruk.data.durasi} Jam</p>
+                <p className="border-t border-dashed border-black/30 my-2"></p>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex justify-between">
+                  <span>Sewa Meja</span>
+                  <span>Rp {modalStruk.data.hargaSewa?.toLocaleString("id-ID")}</span>
+                </div>
+                {modalStruk.data.itemsFB && modalStruk.data.itemsFB.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-[10px]">
+                    <span>{item.nama} x{item.qty}</span>
+                    <span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span>
+                  </div>
+                ))}
+                <p className="border-t border-dashed border-black/30 my-2"></p>
+              </div>
+
+              <div className="text-right space-y-0.5">
+                <div className="flex justify-between font-bold text-sm">
+                  <span>TOTAL</span>
+                  <span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span>METODE</span>
+                  <span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span>
+                </div>
+              </div>
+
+              <div className="text-center mt-4 pt-2 border-t border-dashed border-black/30">
+                <p className="text-[10px] font-bold">TERIMA KASIH</p>
+                <p className="text-[9px]">SELAMAT BERLATIH KEMBALI!</p>
+              </div>
+            </div>
+
+            <div className="p-6 flex gap-3">
+              <button 
+                onClick={() => setModalStruk({ isOpen: false, data: null })}
+                className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase cursor-pointer hover:bg-slate-700 transition-all"
+              >
+                <FontAwesomeIcon icon={faTimes} size={12} className="mr-1" /> Tutup
+              </button>
+              <button 
+                onClick={handlePrintStruk}
+                className="flex-1 py-3 bg-[#00ff99] text-black font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2 cursor-pointer hover:bg-[#00cc7a] transition-all"
+              >
+                <FontAwesomeIcon icon={faPrint} size={12} /> Cetak Struk
               </button>
             </div>
-            <div className="bg-white text-black p-3 font-mono text-[10px] rounded-xl">
-              <div className="text-center border-b pb-1 mb-2">
-                <h4 className="font-bold">ROYAL CUE BILLIARD</h4>
-              </div>
-              <div>WAKTU: {modalStruk.data.waktu_selesai}</div>
-              <div>MEJA: {modalStruk.data.nomor_meja}</div>
-              <div>CUSTOMER: {modalStruk.data.nama_pelanggan}</div>
-              <div className="border-t my-1"></div>
-              <div className="flex justify-between"><span>Sewa ({modalStruk.data.durasi} Jam):</span><span>Rp {modalStruk.data.total_sewa?.toLocaleString("id-ID")}</span></div>
-              {modalStruk.data.pesanan_fb?.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-[9px]">
-                  <span>{item.nama} x{item.qty}:</span>
-                  <span>Rp {(item.harga * item.qty).toLocaleString("id-ID")}</span>
-                </div>
-              ))}
-              <div className="border-t my-1 pt-1 font-bold flex justify-between">
-                <span>TOTAL:</span>
-                <span>Rp {modalStruk.data.total_akhir?.toLocaleString("id-ID")}</span>
-              </div>
-              <div className="flex justify-between text-[9px]">
-                <span>BAYAR:</span>
-                <span className="font-bold">{modalStruk.data.metode_pembayaran?.toUpperCase()}</span>
-              </div>
-              <div className="text-center border-t mt-2 pt-2 text-[9px]">
-                <p>--- TERIMA KASIH ---</p>
-              </div>
-            </div>
-            <button onClick={() => window.print()} className="mt-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold cursor-pointer">🖨️ Cetak Struk</button>
           </div>
         </div>
       )}
 
       <style>{`
         @media print {
-          body, html, #root, .min-h-screen {
-            background: white !important;
-            color: black !important;
-            padding: 0 !important;
-            margin: 0 !important;
+          body * {
+            visibility: hidden;
           }
-          .no-print {
-            display: none !important;
+          #thermal-receipt, #thermal-receipt * {
+            visibility: visible;
           }
+          #thermal-receipt {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 10px;
+            box-shadow: none;
+          }
+          @page {
+            margin: 0;
+          }
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .fixed.z-50, .fixed.z-200 {
+          animation: fadeIn 0.2s ease-out forwards;
         }
       `}</style>
 

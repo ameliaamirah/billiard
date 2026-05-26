@@ -1,5 +1,15 @@
 import React from "react";
-import { FaInstagram, FaWhatsapp, FaFacebook, FaMapMarkerAlt, FaPhoneAlt, FaEnvelope } from "react-icons/fa";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { 
+  faInstagram, 
+  faWhatsapp, 
+  faFacebook 
+} from "@fortawesome/free-brands-svg-icons";
+import { 
+  faMapMarkerAlt, 
+  faPhoneAlt, 
+  faEnvelope 
+} from "@fortawesome/free-solid-svg-icons";
 import { useNavigate } from "react-router-dom";
 
 const Footer = () => {
@@ -22,18 +32,18 @@ const Footer = () => {
           </p>
           <div className="flex gap-4 mt-6">
             <a href="#" className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center hover:bg-[#00aa66] hover:text-white transition-all">
-              <FaInstagram />
+              <FontAwesomeIcon icon={faInstagram} />
             </a>
             <a href="#" className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center hover:bg-[#00aa66] hover:text-white transition-all">
-              <FaWhatsapp />
+              <FontAwesomeIcon icon={faWhatsapp} />
             </a>
             <a href="#" className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center hover:bg-[#00aa66] hover:text-white transition-all">
-              <FaFacebook />
+              <FontAwesomeIcon icon={faFacebook} />
             </a>
           </div>
         </div>
 
-        {/* KOLOM 2: NAVIGASI CEPAT (Sudah Disesuaikan dengan Halaman Royal Cue) */}
+        {/* KOLOM 2: NAVIGASI CEPAT */}
         <div>
           <h3 className="text-white font-bold mb-6 uppercase text-xs tracking-widest">Navigasi</h3>
           <ul className="grid gap-3 text-sm">
@@ -81,15 +91,15 @@ const Footer = () => {
           <h3 className="text-white font-bold mb-6 uppercase text-xs tracking-widest">Alamat</h3>
           <ul className="grid gap-4 text-sm text-slate-400">
             <li className="flex gap-3 items-start">
-              <FaMapMarkerAlt className="text-[#00ff99] mt-1 shrink-0" />
+              <FontAwesomeIcon icon={faMapMarkerAlt} className="text-[#00ff99] mt-1 shrink-0" />
               <span>Jl. Jawa No. 10, Banyuwangi, Jawa Timur</span>
             </li>
             <li className="flex gap-3 items-center">
-              <FaPhoneAlt className="text-[#00ff99] shrink-0" />
+              <FontAwesomeIcon icon={faPhoneAlt} className="text-[#00ff99] shrink-0" />
               <span>+62 812-3456-7890</span>
             </li>
             <li className="flex gap-3 items-center">
-              <FaEnvelope className="text-[#00ff99] shrink-0" />
+              <FontAwesomeIcon icon={faEnvelope} className="text-[#00ff99] shrink-0" />
               <span>hello@royalcue.com</span>
             </li>
           </ul>

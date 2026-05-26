@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { FaTv, FaCrown, FaChevronRight } from "react-icons/fa";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTv, faCrown, faChevronRight } from "@fortawesome/free-solid-svg-icons";
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ const HomePage = () => {
     >
       
       {/* OVERLAY SINETIK SIMETRIS */}
-      <div className="absolute inset-0 bg-radial from-transparent via-slate-950/60 to-slate-950/90 z-0" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/60 to-slate-950/90 z-0" />
       <div className="absolute inset-0 bg-slate-950/50 z-0" />
       
       {/* AKSEN EMERALD GLOW */}
@@ -24,7 +25,8 @@ const HomePage = () => {
         {/* BADGE PRESTISIUS */}
         <div className="flex justify-center">
           <span className="flex items-center gap-2 text-[#00ff99] font-black tracking-widest text-[10px] uppercase bg-[#00CC7A]/20 px-4 py-2 rounded-full border border-[#00CC7A]/40 backdrop-blur-sm shadow-inner">
-            <FaCrown className="text-xs text-amber-400 animate-pulse" /> Premium Sport Lounge
+            <FontAwesomeIcon icon={faCrown} className="text-xs text-amber-400 animate-pulse" /> 
+            Premium Sport Lounge
           </span>
         </div>
         
@@ -41,15 +43,15 @@ const HomePage = () => {
           Kelola ketersediaan meja biliar premium, perhitungan billing otomatis real-time, dan pemesanan layanan F&B terintegrasi dalam satu sistem modern.
         </p>
 
-        {/* TOMBOL AKSI UTAMA (Diubah Navigasinya ke halaman Reservasi Pelanggan) */}
+        {/* TOMBOL AKSI UTAMA */}
         <div className="flex justify-center">
           <button 
             onClick={() => navigate("/reservasi")}
             className="flex items-center gap-3 bg-[#00aa66] hover:bg-[#00cc7a] text-white font-black text-sm px-8 py-4 rounded-xl transition-all duration-300 shadow-xl shadow-[#00aa66]/30 hover:shadow-[#00aa66]/50 active:scale-95 cursor-pointer group"
           >
-            <FaTv className="text-base" />
+            <FontAwesomeIcon icon={faTv} className="text-base" />
             <span>Reservasi Meja</span>
-            <FaChevronRight className="text-xs transition-transform duration-300 group-hover:translate-x-1" />
+            <FontAwesomeIcon icon={faChevronRight} className="text-xs transition-transform duration-300 group-hover:translate-x-1" />
           </button>
         </div>
 
