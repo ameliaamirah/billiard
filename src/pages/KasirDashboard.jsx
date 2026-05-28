@@ -4,9 +4,14 @@ import {
   faSearch, faCoffee, faHistory, faTrash, faPrint, 
   faTimes, faExchangeAlt, faLock, faPlay, faStop, 
   faUser, faClock, faMoneyBillWave, faCheck,
-  faReceipt, faHourglassHalf, faPlusCircle
+  faReceipt, faHourglassHalf, faPlusCircle,
+  faFileExcel, faFilePdf
 } from "@fortawesome/free-solid-svg-icons";
-import FandBModal from "../components/FandBModal"; 
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import FandBModal from "../components/FandBModal";
+import { useCountdown } from "../hooks/useCountdown";
 import { supabase } from "../supabaseClient";
 
 export default function KasirDashboard() {
@@ -15,7 +20,6 @@ export default function KasirDashboard() {
   const [filterAktif, setFilterAktif] = useState("Semua"); 
   const [cariNama, setCariNama] = useState("");
   const [loading, setLoading] = useState(false);
-  const [timerUpdate, setTimerUpdate] = useState(0); // Untuk force update timer
 
   const [modalFB, setModalFB] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pesananSaatIni: [] });
   const [modalStruk, setModalStruk] = useState({ isOpen: false, data: null });
@@ -50,7 +54,7 @@ export default function KasirDashboard() {
       
     } catch (error) {
       console.error("Error:", error);
-      alert("Gagal memuat数据: " + error.message);
+      alert("Gagal memuat data: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -75,20 +79,120 @@ export default function KasirDashboard() {
       )
       .subscribe();
     
-    // Timer untuk update setiap detik
-    const interval = setInterval(() => {
-      setTimerUpdate(prev => prev + 1);
-    }, 1000);
-    
     return () => {
       supabase.removeChannel(channelReservasi);
       supabase.removeChannel(channelRiwayat);
-      clearInterval(interval);
     };
   }, []);
 
-  // Hitung endTime dan sisa waktu
-  const getEndTime = (jamMulai, durasiJam) => {
+  // ==================== EXPORT EXCEL ====================
+  const exportToExcel = () => {
+    if (riwayatTransaksi.length === 0) {
+      alert("Belum ada data transaksi untuk diexport!");
+      return;
+    }
+    
+    try {
+      const exportData = riwayatTransaksi.map((item, index) => ({
+        "No": index + 1,
+        "Tanggal": item.waktu_selesai || "-",
+        "Nomor Struk": item.id_booking || "-",
+        "Meja": item.nomor_meja || "-",
+        "Pelanggan": item.nama_pelanggan || "-",
+        "Durasi": `${item.durasi || 1} Jam`,
+        "Sewa Meja": item.total_sewa || 0,
+        "Kantin/F&B": item.total_fb || 0,
+        "Total": item.total_akhir || 0,
+        "Metode Bayar": item.metode_pembayaran?.toUpperCase() || "-",
+      }));
+      
+      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
+      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
+      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      
+      exportData.push({
+        "No": "", "Tanggal": "", "Nomor Struk": "", "Meja": "", "Pelanggan": "", "Durasi": "",
+        "Sewa Meja": totalSewa, "Kantin/F&B": totalKantin, "Total": totalOmset, "Metode Bayar": "TOTAL",
+      });
+      
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Laporan Transaksi");
+      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      alert("✅ Laporan berhasil diexport ke Excel!");
+    } catch (error) {
+      console.error("Error export Excel:", error);
+      alert("Gagal export Excel: " + error.message);
+    }
+  };
+
+  // ==================== EXPORT PDF ====================
+  const exportToPDF = () => {
+    if (riwayatTransaksi.length === 0) {
+      alert("Belum ada data transaksi untuk diexport!");
+      return;
+    }
+    
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      
+      doc.setFontSize(18);
+      doc.setTextColor(0, 100, 0);
+      doc.text("ROYAL CUE BILLIARD", 14, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Jl. Jawa No. 10, Banyuwangi, Jawa Timur", 14, 28);
+      doc.text(`Telp: +62 812-3456-7890`, 14, 34);
+      doc.text(`Dicetak: ${new Date().toLocaleString("id-ID")}`, 14, 40);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text("LAPORAN TRANSAKSI", 14, 50);
+      
+      const tableData = riwayatTransaksi.map((item, index) => [
+        index + 1,
+        item.waktu_selesai || "-",
+        item.id_booking || "-",
+        item.nomor_meja || "-",
+        item.nama_pelanggan || "-",
+        `${item.durasi || 1} Jam`,
+        `Rp ${(item.total_sewa || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.total_fb || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.total_akhir || 0).toLocaleString("id-ID")}`,
+        item.metode_pembayaran?.toUpperCase() || "-",
+      ]);
+      
+      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
+      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
+      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      
+      autoTable(doc, {
+        startY: 55,
+        head: [["No", "Tanggal", "No. Struk", "Meja", "Pelanggan", "Durasi", "Sewa", "Kantin", "Total", "Metode"]],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [0, 100, 0], textColor: 255, fontStyle: 'bold' },
+        foot: [[
+          "", "", "", "", "", "",
+          { content: `Rp ${totalSewa.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalKantin.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalOmset.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold', textColor: [0, 100, 0] } },
+          "TOTAL"
+        ]],
+      });
+      
+      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      alert("✅ Laporan berhasil diexport ke PDF!");
+    } catch (error) {
+      console.error("Error export PDF:", error);
+      alert("Gagal export PDF: " + error.message);
+    }
+  };
+
+  // Hitung endTime untuk timer
+  const calculateEndTime = (jamMulai, durasiJam) => {
     if (!jamMulai || jamMulai === "-" || !durasiJam) return null;
     const [hours, minutes] = jamMulai.split(":").map(Number);
     const startDate = new Date();
@@ -96,20 +200,7 @@ export default function KasirDashboard() {
     return startDate.getTime() + (durasiJam * 3600000);
   };
 
-  const getTimeLeft = (endTime) => {
-    if (!endTime) return null;
-    return Math.max(0, endTime - Date.now());
-  };
-
-  const formatTimeLeft = (ms) => {
-    if (!ms && ms !== 0) return "00:00:00";
-    const hours = Math.floor(ms / 3600000);
-    const minutes = Math.floor((ms % 3600000) / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  };
-
-  // Fungsi Extend Waktu (Tambah Jam)
+  // Fungsi Extend Waktu
   const extendWaktu = async (id, jamMulai, durasiSaatIni) => {
     const tambahJam = prompt("Masukkan tambahan jam (1-4 jam):", "1");
     if (!tambahJam) return;
@@ -126,14 +217,12 @@ export default function KasirDashboard() {
     
     if (window.confirm(`Tambah ${jamTambahan} jam (${jamTambahan} x Rp ${hargaPerJam.toLocaleString("id-ID")} = Rp ${biayaTambahan.toLocaleString("id-ID")})?`)) {
       try {
-        // Update durasi di database
         const { error } = await supabase
           .from("reservasi_billiard")
           .update({ durasi_bermain: durasiBaru })
           .eq("id", id);
         
         if (error) throw error;
-        
         await fetchData();
         alert(`✅ Waktu bermain berhasil ditambah ${jamTambahan} jam!`);
       } catch (error) {
@@ -144,16 +233,6 @@ export default function KasirDashboard() {
   };
 
   const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB, durasi, itemFB) => {
-    console.log("===== UBAH STATUS MEJA =====");
-    console.log("ID:", id);
-    console.log("Status Baru:", statusBaru);
-    console.log("Nama Pelanggan:", namaPelanggan);
-    console.log("Nomor Meja:", nomorMeja);
-    console.log("Total Sewa:", totalSewa);
-    console.log("Total FB:", totalFB);
-    console.log("Durasi:", durasi);
-    console.log("Item FB:", itemFB);
-    
     try {
       if (statusBaru === "Selesai") {
         const metode = prompt("Masukkan metode pembayaran (Cash / QRIS / Transfer):", "Cash") || "Cash";
@@ -216,7 +295,6 @@ export default function KasirDashboard() {
           .eq("id", id);
         
         if (updateError) throw updateError;
-        
         await fetchData();
         alert("✅ Status berhasil diubah menjadi Playing!");
       }
@@ -277,7 +355,6 @@ export default function KasirDashboard() {
         .eq("id", idMejaAsal);
       
       if (error) throw error;
-      
       await fetchData();
       alert(`✅ Berhasil pindah dari ${nomorMejaAsal} ke ${mejaTujuanValid}`);
     } catch (error) {
@@ -340,24 +417,21 @@ export default function KasirDashboard() {
   };
 
   const simpanPesananKantin = async (id, keranjangBaru) => {
-  console.log("🍽️ Menyimpan pesanan kantin:", { id, keranjangBaru });
-  
-  if (!id) {
-    alert("ID Meja tidak valid!");
-    return false;
-  }
-  
-  try {
-    const { error } = await supabase
-      .from("reservasi_billiard")
-      .update({ pesanan_fb: keranjangBaru })
-      .eq("id", id);
+    if (!id) {
+      alert("ID Meja tidak valid!");
+      return false;
+    }
     
-    if (error) throw error;
-    
-    await fetchData();
-    alert("✅ Pesanan berhasil disimpan!");
-    return true;
+    try {
+      const { error } = await supabase
+        .from("reservasi_billiard")
+        .update({ pesanan_fb: keranjangBaru })
+        .eq("id", id);
+      
+      if (error) throw error;
+      await fetchData();
+      alert("✅ Pesanan berhasil disimpan!");
+      return true;
     } catch (error) {
       console.error("Error:", error);
       alert("Gagal menyimpan pesanan: " + error.message);
@@ -406,6 +480,22 @@ export default function KasirDashboard() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={exportToExcel}
+              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+              title="Export ke Excel"
+            >
+              <FontAwesomeIcon icon={faFileExcel} size={14} /> Export Excel
+            </button>
+
+            <button
+              onClick={exportToPDF}
+              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+              title="Export ke PDF"
+            >
+              <FontAwesomeIcon icon={faFilePdf} size={14} /> Export PDF
+            </button>
+
             <button
               onClick={tanganiClosingShift}
               className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
@@ -540,23 +630,19 @@ export default function KasirDashboard() {
                 const totalBiayaSewa = durasiBermain * hargaPerJam;
                 const totalTagihan = totalBiayaSewa + totalBelanjaFB;
                 
-                // Hitung timer
-                const endTime = getEndTime(jamMulai, durasiBermain);
-                const timeLeft = getTimeLeft(endTime);
-                const formattedTime = formatTimeLeft(timeLeft);
-                const isExpiring = isPlaying && timeLeft > 0 && timeLeft < 600000;
-                const isExpired = isPlaying && timeLeft <= 0;
-
+                // MENGGUNAKAN useCountdown HOOK
+                const endTime = calculateEndTime(jamMulai, durasiBermain);
+                const { formatted, isExpired, isExpiring } = useCountdown(isPlaying ? endTime : null);
+                
                 return (
                   <div key={meja.id} className={`bg-slate-900/60 border rounded-2xl p-5 relative overflow-hidden hover:border-emerald-500/50 transition-all duration-300 ${
                     isExpired ? "bg-red-950/30 border-red-500/50" : 
                     isExpiring ? "bg-amber-950/30 border-amber-500/50 animate-pulse" : 
                     isPlaying ? "border-sky-500/30" : "border-slate-800"
                   }`}>
-                    {/* Progress Bar */}
                     {isPlaying && !isExpired && endTime && (
                       <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" 
-                           style={{ width: `${(timeLeft / (durasiBermain * 3600000)) * 100}%` }} />
+                           style={{ width: `${((endTime - Date.now()) / (durasiBermain * 3600000)) * 100}%` }} />
                     )}
                     
                     <div className={`absolute top-0 left-0 right-0 h-1 ${isPlaying ? "bg-gradient-to-r from-sky-400 to-indigo-500" : "bg-gradient-to-r from-amber-400 to-orange-500"}`} />
@@ -567,7 +653,6 @@ export default function KasirDashboard() {
                         <p className="text-slate-500 text-[9px] font-mono">ID: {idBooking}</p>
                       </div>
                       <div className="flex gap-1.5">
-                        {/* Tombol Pindah Meja */}
                         <button 
                           onClick={() => tanganiPindahMeja(meja.id, nomorMeja)} 
                           className="p-1.5 rounded-lg border transition-all bg-purple-500/20 border-purple-500/30 text-purple-400 cursor-pointer hover:bg-purple-500/30 hover:scale-105"
@@ -576,7 +661,6 @@ export default function KasirDashboard() {
                           <FontAwesomeIcon icon={faExchangeAlt} size={13} />
                         </button>
                         
-                        {/* Tombol Order Makanan */}
                         <button 
                           onClick={() => {
                             setModalFB({ 
@@ -608,13 +692,12 @@ export default function KasirDashboard() {
                         <span className="font-mono text-emerald-400">{jamMulai}</span>
                       </div>
                       
-                      {/* Timer dan Tombol Extend */}
                       {isPlaying && (
                         <div className="flex justify-between items-center">
                           <span className="text-slate-400"><FontAwesomeIcon icon={faHourglassHalf} size={10} className="mr-1" /> Sisa Waktu:</span>
                           <div className="flex items-center gap-2">
                             <span className={`font-mono font-bold ${isExpiring ? "text-amber-400 animate-pulse" : "text-emerald-400"}`}>
-                              {formattedTime}
+                              {formatted}
                             </span>
                             <button 
                               onClick={() => extendWaktu(meja.id, nomorMeja, durasiBermain)}
