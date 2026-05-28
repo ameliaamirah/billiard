@@ -1,12 +1,11 @@
-// src/components/MejaCard.jsx
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
-  faExchangeAlt, faCoffee, faPlay, faStop, faTrash, 
-  faUser, faClock, faMoneyBillWave, faHourglassHalf, faPlusCircle
+  faCoffee, faExchangeAlt, faUser, faClock, faMoneyBillWave, 
+  faHourglassHalf, faPlusCircle, faShoppingCart
 } from "@fortawesome/free-solid-svg-icons";
 import { useCountdown } from "../hooks/useCountdown";
 
-export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onStartMain, onStopBayar, onBatalkan, getHargaPerJam }) {
+export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onSewaMeja, onExtendWaktu }) {
   const statusSekarang = meja.status_pemesanan || "Pending";
   const namaPelanggan = meja.nama_pelanggan || "-";
   const nomorMeja = meja.nomor_meja || "Meja ?";
@@ -17,8 +16,11 @@ export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onStartMa
   const isPlaying = statusSekarang === "Playing";
   
   const totalBelanjaFB = (pesananFB || []).reduce((acc, curr) => acc + ((curr.harga || 0) * (curr.qty || 1)), 0);
-  const hargaPerJam = getHargaPerJam(nomorMeja);
-  const totalBiayaSewa = durasiBermain * hargaPerJam;
+  const getHargaPerJam = (nomorMeja) => {
+    if (!nomorMeja) return 50000;
+    return nomorMeja.toLowerCase().includes("vip") ? 80000 : 50000;
+  };
+  const totalBiayaSewa = durasiBermain * getHargaPerJam(nomorMeja);
   const totalTagihan = totalBiayaSewa + totalBelanjaFB;
   
   // Hitung endTime untuk timer
@@ -39,7 +41,6 @@ export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onStartMa
       isExpiring ? "bg-amber-950/30 border-amber-500/50 animate-pulse" : 
       isPlaying ? "border-sky-500/30" : "border-slate-800"
     }`}>
-      {/* Progress Bar */}
       {isPlaying && !isExpired && endTime && (
         <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" 
              style={{ width: `${((endTime - Date.now()) / (durasiBermain * 3600000)) * 100}%` }} />
@@ -120,37 +121,23 @@ export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onStartMa
         <span className="text-lg font-black text-emerald-400 font-mono">Rp {totalTagihan.toLocaleString("id-ID")}</span>
       </div>
       
-      <div className="flex gap-2">
-        {statusSekarang === "Pending" ? (
-          <>
-            <button 
-              onClick={() => onStartMain(meja.id, namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
-              className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all active:scale-95"
-            >
-              <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
-            </button>
-            <button 
-              onClick={() => onBatalkan(meja.id, nomorMeja, namaPelanggan)} 
-              className="px-3 bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/30 transition-all"
-              title="Batalkan"
-            >
-              <FontAwesomeIcon icon={faTrash} size={13} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button disabled className="flex-1 bg-slate-800/50 text-slate-600 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-not-allowed">
-              <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
-            </button>
-            <button 
-              onClick={() => onStopBayar(meja.id, namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
-              className={`flex-1 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all ${isExpired ? "bg-red-600 hover:bg-red-500" : "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500"} cursor-pointer active:scale-95`}
-            >
-              <FontAwesomeIcon icon={faStop} size={10} className="mr-1" /> STOP & BAYAR
-            </button>
-          </>
-        )}
-      </div>
+      {/* TOMOL SEWA MEJA & BAYAR (UNTUK STATUS PENDING) */}
+      {statusSekarang === "Pending" ? (
+        <button 
+          onClick={() => onSewaMeja(meja, totalBiayaSewa, totalBelanjaFB, totalTagihan)}
+          className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-2.5 rounded-xl text-sm uppercase tracking-wider cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-2"
+        >
+          <FontAwesomeIcon icon={faShoppingCart} size={14} /> SEWA MEJA & BAYAR
+        </button>
+      ) : isPlaying ? (
+        <button disabled className="w-full bg-slate-800/50 text-slate-600 font-bold py-2.5 rounded-xl text-sm uppercase tracking-wider cursor-not-allowed flex items-center justify-center gap-2">
+          <FontAwesomeIcon icon={faClock} size={14} /> SEDANG BERMAIN
+        </button>
+      ) : (
+        <button disabled className="w-full bg-slate-800/50 text-slate-600 font-bold py-2.5 rounded-xl text-sm uppercase tracking-wider cursor-not-allowed flex items-center justify-center gap-2">
+          <FontAwesomeIcon icon={faCheck} size={14} /> SELESAI
+        </button>
+      )}
     </div>
   );
 }

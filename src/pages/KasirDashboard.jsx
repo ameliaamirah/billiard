@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
-  faSearch, faCoffee, faHistory, faTrash, faPrint, 
-  faTimes, faExchangeAlt, faLock, faPlay, faStop, 
-  faUser, faClock, faMoneyBillWave, faCheck,
-  faReceipt, faHourglassHalf, faPlusCircle,
-  faFileExcel, faFilePdf
+  faSearch, faCoffee, faHistory, faPrint, 
+  faTimes, faLock, faUser, faClock, faMoneyBillWave, faCheck,
+  faReceipt, faFileExcel, faFilePdf, faPlus
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import FandBModal from "../components/FandBModal";
-import { useCountdown } from "../hooks/useCountdown";
+import MejaCard from "../components/MejaCard";
+import ModalBayarDulu from "../components/ModalBayarDulu";
 import { supabase } from "../supabaseClient";
 
 export default function KasirDashboard() {
+  const navigate = useNavigate();
   const [daftarMeja, setDaftarMeja] = useState([]);
   const [riwayatTransaksi, setRiwayatTransaksi] = useState([]);
   const [filterAktif, setFilterAktif] = useState("Semua"); 
@@ -24,6 +25,7 @@ export default function KasirDashboard() {
   const [modalFB, setModalFB] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pesananSaatIni: [] });
   const [modalStruk, setModalStruk] = useState({ isOpen: false, data: null });
   const [modalClosing, setModalClosing] = useState({ isOpen: false, reportData: null });
+  const [modalBayar, setModalBayar] = useState({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 });
 
   const getHargaPerJam = (nomorMeja) => {
     if (!nomorMeja) return 50000;
@@ -191,17 +193,8 @@ export default function KasirDashboard() {
     }
   };
 
-  // Hitung endTime untuk timer
-  const calculateEndTime = (jamMulai, durasiJam) => {
-    if (!jamMulai || jamMulai === "-" || !durasiJam) return null;
-    const [hours, minutes] = jamMulai.split(":").map(Number);
-    const startDate = new Date();
-    startDate.setHours(hours, minutes, 0, 0);
-    return startDate.getTime() + (durasiJam * 3600000);
-  };
-
   // Fungsi Extend Waktu
-  const extendWaktu = async (id, jamMulai, durasiSaatIni) => {
+  const extendWaktu = async (id, nomorMeja, durasiSaatIni) => {
     const tambahJam = prompt("Masukkan tambahan jam (1-4 jam):", "1");
     if (!tambahJam) return;
     
@@ -212,19 +205,42 @@ export default function KasirDashboard() {
     }
     
     const durasiBaru = durasiSaatIni + jamTambahan;
-    const hargaPerJam = getHargaPerJam(jamMulai);
+    const hargaPerJam = getHargaPerJam(nomorMeja);
     const biayaTambahan = jamTambahan * hargaPerJam;
     
     if (window.confirm(`Tambah ${jamTambahan} jam (${jamTambahan} x Rp ${hargaPerJam.toLocaleString("id-ID")} = Rp ${biayaTambahan.toLocaleString("id-ID")})?`)) {
       try {
+        // Update durasi di reservasi
         const { error } = await supabase
           .from("reservasi_billiard")
           .update({ durasi_bermain: durasiBaru })
           .eq("id", id);
         
         if (error) throw error;
+        
+        // Update total_sewa di riwayat_transaksi
+        const { data: riwayatData } = await supabase
+          .from("riwayat_transaksi")
+          .select("*")
+          .eq("id_booking", `RC-${String(id).slice(-8)}`)
+          .single();
+        
+        if (riwayatData) {
+          const newTotalSewa = riwayatData.total_sewa + biayaTambahan;
+          const newTotalAkhir = newTotalSewa + (riwayatData.total_fb || 0);
+          
+          await supabase
+            .from("riwayat_transaksi")
+            .update({ 
+              durasi: durasiBaru,
+              total_sewa: newTotalSewa,
+              total_akhir: newTotalAkhir
+            })
+            .eq("id", riwayatData.id);
+        }
+        
         await fetchData();
-        alert(`✅ Waktu bermain berhasil ditambah ${jamTambahan} jam!`);
+        alert(`✅ Waktu bermain berhasil ditambah ${jamTambahan} jam! Biaya tambahan: Rp ${biayaTambahan.toLocaleString("id-ID")}`);
       } catch (error) {
         console.error("Error:", error);
         alert("Gagal menambah waktu: " + error.message);
@@ -232,93 +248,118 @@ export default function KasirDashboard() {
     }
   };
 
-  const ubahStatusMeja = async (id, statusBaru, namaPelanggan, nomorMeja, totalSewa, totalFB, durasi, itemFB) => {
+  // Fungsi untuk sewa meja (bayar di muka)
+  const sewaMeja = (meja, totalSewa, totalFB, totalTagihan) => {
+    setModalBayar({
+      isOpen: true,
+      meja: meja,
+      totalBiaya: totalTagihan,
+      totalSewa: totalSewa,
+      totalFB: totalFB
+    });
+  };
+
+  // Proses pembayaran di muka
+  const prosesBayarDulu = async (metode) => {
+    const { meja, totalSewa, totalFB, totalBiaya } = modalBayar;
+    
     try {
-      if (statusBaru === "Selesai") {
-        const metode = prompt("Masukkan metode pembayaran (Cash / QRIS / Transfer):", "Cash") || "Cash";
-        const jamSelesai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
-        const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
-        const totalAkhirSemua = Number(totalSewa || 0) + Number(totalFB || 0);
-
-        const transaksiStruk = {
-          noStruk: "RC-" + String(id).slice(-8),
-          tanggal: `${tanggalHariIni} ${jamSelesai}`,
-          kasir: "Kasir",
-          meja: nomorMeja,
-          pelanggan: namaPelanggan,
-          durasi: durasi,
-          hargaSewa: Number(totalSewa || 0),
-          itemsFB: itemFB || [],
-          totalFB: Number(totalFB || 0),
-          totalAkhir: totalAkhirSemua,
-          metode: metode.toLowerCase()
-        };
-
-        const dataStrukBaru = {
-          id_booking: "RC-" + String(id).slice(-8),
-          nomor_meja: nomorMeja,
-          nama_pelanggan: namaPelanggan,
-          durasi: durasi,
-          total_sewa: Number(totalSewa || 0),
-          total_fb: Number(totalFB || 0),
-          total_akhir: totalAkhirSemua,
-          metode_pembayaran: metode.toLowerCase(),
-          waktu_selesai: `${tanggalHariIni} ${jamSelesai}`,
-          pesanan_fb: itemFB || [],
-          created_at: new Date().toISOString()
-        };
-
-        const { error: insertError } = await supabase
-          .from("riwayat_transaksi")
-          .insert([dataStrukBaru]);
-        
-        if (insertError) throw insertError;
-
-        const { error: deleteError } = await supabase
-          .from("reservasi_billiard")
-          .delete()
-          .eq("id", id);
-        
-        if (deleteError) throw deleteError;
-
-        setModalStruk({ isOpen: true, data: transaksiStruk });
-        await fetchData();
-        alert("✅ Transaksi berhasil!");
-
-      } else if (statusBaru === "Playing") {
-        const { error: updateError } = await supabase
-          .from("reservasi_billiard")
-          .update({ 
-            status_pemesanan: statusBaru,
-            jam_mulai: new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })
-          })
-          .eq("id", id);
-        
-        if (updateError) throw updateError;
-        await fetchData();
-        alert("✅ Status berhasil diubah menjadi Playing!");
-      }
+      const jamMulai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
+      const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
+      
+      // Update status meja menjadi Playing dan catat jam mulai
+      const { error: updateError } = await supabase
+        .from("reservasi_billiard")
+        .update({
+          status_pemesanan: "Playing",
+          jam_mulai: jamMulai
+        })
+        .eq("id", meja.id);
+      
+      if (updateError) throw updateError;
+      
+      // Simpan ke riwayat transaksi (sudah dibayar)
+      const dataStrukBaru = {
+        id_booking: "RC-" + String(meja.id).slice(-8),
+        nomor_meja: meja.nomor_meja,
+        nama_pelanggan: meja.nama_pelanggan,
+        durasi: meja.durasi_bermain,
+        total_sewa: totalSewa,
+        total_fb: totalFB,
+        total_akhir: totalBiaya,
+        metode_pembayaran: metode.toLowerCase(),
+        waktu_selesai: `${tanggalHariIni} ${jamMulai}`,
+        pesanan_fb: meja.pesanan_fb || [],
+        created_at: new Date().toISOString()
+      };
+      
+      const { error: insertError } = await supabase
+        .from("riwayat_transaksi")
+        .insert([dataStrukBaru]);
+      
+      if (insertError) throw insertError;
+      
+      setModalBayar({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 });
+      await fetchData();
+      alert(`✅ Pembayaran berhasil! Meja ${meja.nomor_meja} siap digunakan. Waktu mulai: ${jamMulai}`);
+      
     } catch (error) {
-      console.error("ERROR:", error);
-      alert("Gagal: " + error.message);
+      console.error("Error:", error);
+      alert("Gagal memproses pembayaran: " + error.message);
     }
   };
 
-  const batalkanBookingPending = async (id, nomorMeja, namaPelanggan) => {
-    if (window.confirm(`Batalkan pesanan ${nomorMeja} atas nama "${namaPelanggan}"?`)) {
-      try {
-        const { error } = await supabase
-          .from("reservasi_billiard")
-          .delete()
-          .eq("id", id);
-        
-        if (error) throw error;
-        await fetchData();
-        alert("✅ Pesanan dibatalkan");
-      } catch (error) {
-        alert("Gagal: " + error.message);
-      }
+  const simpanPesananKantin = async (id, keranjangBaru) => {
+    if (!id) {
+      alert("ID Meja tidak valid!");
+      return false;
     }
+    
+    try {
+      // Update pesanan di reservasi
+      const { error } = await supabase
+        .from("reservasi_billiard")
+        .update({ pesanan_fb: keranjangBaru })
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      // Hitung total tambahan
+      const totalTambahan = keranjangBaru.reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
+      
+      // Update juga di riwayat_transaksi
+      const { data: riwayatData } = await supabase
+        .from("riwayat_transaksi")
+        .select("*")
+        .eq("id_booking", `RC-${String(id).slice(-8)}`)
+        .single();
+      
+      if (riwayatData) {
+        const newTotalFB = (riwayatData.total_fb || 0) + totalTambahan;
+        const newTotalAkhir = (riwayatData.total_sewa || 0) + newTotalFB;
+        
+        await supabase
+          .from("riwayat_transaksi")
+          .update({ 
+            total_fb: newTotalFB,
+            total_akhir: newTotalAkhir,
+            pesanan_fb: keranjangBaru
+          })
+          .eq("id", riwayatData.id);
+      }
+      
+      await fetchData();
+      alert("✅ Pesanan berhasil disimpan!");
+      return true;
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal menyimpan pesanan: " + error.message);
+      return false;
+    }
+  };
+
+  const handlePrintStruk = () => {
+    window.print();
   };
 
   const tanganiPindahMeja = async (idMejaAsal, nomorMejaAsal) => {
@@ -401,46 +442,38 @@ export default function KasirDashboard() {
     });
   };
 
+  // ==================== FUNGSI TUTUP SHIFT YANG SUDAH DIPERBAIKI ====================
   const selesaikanClosingDanReset = async () => {
-    if (window.confirm("Konfirmasi tutup shift?")) {
+    if (window.confirm("Konfirmasi tutup shift? Semua meja akan direset ke status Pending.")) {
       try {
+        // 1. Simpan laporan ke arsip
         await supabase.from("arsip_laporan_owner").insert([modalClosing.reportData]);
+        
+        // 2. Hapus semua riwayat transaksi
         await supabase.from("riwayat_transaksi").delete().neq("id", 0);
+        
+        // 3. RESET SEMUA MEJA (ubah status menjadi Pending, jam_mulai menjadi '-', reset pesanan)
+        const { error: resetError } = await supabase
+          .from("reservasi_billiard")
+          .update({ 
+            status_pemesanan: "Pending",
+            jam_mulai: "-",
+            pesanan_fb: []
+          })
+          .neq("id", 0);
+        
+        if (resetError) throw resetError;
+        
         setRiwayatTransaksi([]);
         setModalClosing({ isOpen: false, reportData: null });
         await fetchData();
-        alert("✅ Shift ditutup!");
+        alert("✅ Shift ditutup! Semua meja telah direset.");
+        
       } catch (error) {
-        alert("Gagal: " + error.message);
+        console.error("Error closing shift:", error);
+        alert("Gagal menutup shift: " + error.message);
       }
     }
-  };
-
-  const simpanPesananKantin = async (id, keranjangBaru) => {
-    if (!id) {
-      alert("ID Meja tidak valid!");
-      return false;
-    }
-    
-    try {
-      const { error } = await supabase
-        .from("reservasi_billiard")
-        .update({ pesanan_fb: keranjangBaru })
-        .eq("id", id);
-      
-      if (error) throw error;
-      await fetchData();
-      alert("✅ Pesanan berhasil disimpan!");
-      return true;
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Gagal menyimpan pesanan: " + error.message);
-      return false;
-    }
-  };
-
-  const handlePrintStruk = () => {
-    window.print();
   };
 
   const mejaTerfilter = daftarMeja.filter((meja) => {
@@ -476,10 +509,17 @@ export default function KasirDashboard() {
             <h1 className="text-2xl md:text-3xl font-black text-white">
               Royal Cue <span className="text-emerald-400">Dashboard</span>
             </h1>
-            <p className="text-slate-400 text-xs mt-1">Sistem Billing & Kantin Terpadu</p>
+            <p className="text-slate-400 text-xs mt-1">Sistem Billing & Kantin Terpadu (Bayar di Muka)</p>
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => navigate("/reservasi")}
+              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-emerald-500/30"
+            >
+              <FontAwesomeIcon icon={faPlus} size={14} /> Reservasi Baru
+            </button>
+
             <button
               onClick={exportToExcel}
               className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
@@ -613,154 +653,33 @@ export default function KasirDashboard() {
             {mejaTerfilter.length === 0 ? (
               <div className="col-span-full text-center text-slate-500 py-20">
                 🎱 Tidak ada meja aktif. Silakan buat reservasi terlebih dahulu.
+                <div className="mt-4">
+                  <button
+                    onClick={() => navigate("/reservasi")}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 mx-auto"
+                  >
+                    <FontAwesomeIcon icon={faPlus} size={14} /> Buat Reservasi Baru
+                  </button>
+                </div>
               </div>
             ) : (
-              mejaTerfilter.map((meja) => {
-                const statusSekarang = meja.status_pemesanan || "Pending";
-                const namaPelanggan = meja.nama_pelanggan || "-";
-                const nomorMeja = meja.nomor_meja || "Meja ?";
-                const durasiBermain = meja.durasi_bermain || 1;
-                const pesananFB = meja.pesanan_fb || [];
-                const jamMulai = meja.jam_mulai || "-";
-                const idBooking = meja.id_booking || ("RC-" + String(meja.id).slice(-5));
-                const isPlaying = statusSekarang === "Playing";
-                
-                const totalBelanjaFB = (pesananFB || []).reduce((acc, curr) => acc + ((curr.harga || 0) * (curr.qty || 1)), 0);
-                const hargaPerJam = getHargaPerJam(nomorMeja);
-                const totalBiayaSewa = durasiBermain * hargaPerJam;
-                const totalTagihan = totalBiayaSewa + totalBelanjaFB;
-                
-                // MENGGUNAKAN useCountdown HOOK
-                const endTime = calculateEndTime(jamMulai, durasiBermain);
-                const { formatted, isExpired, isExpiring } = useCountdown(isPlaying ? endTime : null);
-                
-                return (
-                  <div key={meja.id} className={`bg-slate-900/60 border rounded-2xl p-5 relative overflow-hidden hover:border-emerald-500/50 transition-all duration-300 ${
-                    isExpired ? "bg-red-950/30 border-red-500/50" : 
-                    isExpiring ? "bg-amber-950/30 border-amber-500/50 animate-pulse" : 
-                    isPlaying ? "border-sky-500/30" : "border-slate-800"
-                  }`}>
-                    {isPlaying && !isExpired && endTime && (
-                      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" 
-                           style={{ width: `${((endTime - Date.now()) / (durasiBermain * 3600000)) * 100}%` }} />
-                    )}
-                    
-                    <div className={`absolute top-0 left-0 right-0 h-1 ${isPlaying ? "bg-gradient-to-r from-sky-400 to-indigo-500" : "bg-gradient-to-r from-amber-400 to-orange-500"}`} />
-                    
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-black text-xl">🎱 {nomorMeja}</h3>
-                        <p className="text-slate-500 text-[9px] font-mono">ID: {idBooking}</p>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button 
-                          onClick={() => tanganiPindahMeja(meja.id, nomorMeja)} 
-                          className="p-1.5 rounded-lg border transition-all bg-purple-500/20 border-purple-500/30 text-purple-400 cursor-pointer hover:bg-purple-500/30 hover:scale-105"
-                          title="Pindah Meja"
-                        >
-                          <FontAwesomeIcon icon={faExchangeAlt} size={13} />
-                        </button>
-                        
-                        <button 
-                          onClick={() => {
-                            setModalFB({ 
-                              isOpen: true, 
-                              mejaId: meja.id, 
-                              nomorMeja: nomorMeja, 
-                              pesananSaatIni: pesananFB 
-                            });
-                          }} 
-                          className="p-1.5 rounded-lg border transition-all bg-amber-500/20 border-amber-500/30 text-amber-400 cursor-pointer hover:bg-amber-500/30 hover:scale-105"
-                          title="Order Makanan"
-                        >
-                          <FontAwesomeIcon icon={faCoffee} size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1.5 text-[11px] border-y border-slate-800/60 py-2.5 my-2.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400"><FontAwesomeIcon icon={faUser} size={10} className="mr-1" /> Pelanggan:</span>
-                        <span className="font-bold text-white">{namaPelanggan}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400"><FontAwesomeIcon icon={faClock} size={10} className="mr-1" /> Durasi:</span>
-                        <span className="font-semibold text-slate-100">{durasiBermain} Jam</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">🕒 Jam Mulai:</span>
-                        <span className="font-mono text-emerald-400">{jamMulai}</span>
-                      </div>
-                      
-                      {isPlaying && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-400"><FontAwesomeIcon icon={faHourglassHalf} size={10} className="mr-1" /> Sisa Waktu:</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono font-bold ${isExpiring ? "text-amber-400 animate-pulse" : "text-emerald-400"}`}>
-                              {formatted}
-                            </span>
-                            <button 
-                              onClick={() => extendWaktu(meja.id, nomorMeja, durasiBermain)}
-                              className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/40 rounded-lg text-emerald-400 text-[9px] font-bold transition-all flex items-center gap-0.5"
-                              title="Tambah Waktu"
-                            >
-                              <FontAwesomeIcon icon={faPlusCircle} size={8} /> Extend
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex justify-between">
-                        <span className="text-slate-400"><FontAwesomeIcon icon={faMoneyBillWave} size={10} className="mr-1" /> Sewa:</span>
-                        <span className="font-semibold text-emerald-400">Rp {totalBiayaSewa.toLocaleString("id-ID")}</span>
-                      </div>
-                      {totalBelanjaFB > 0 && (
-                        <div className="flex justify-between text-amber-400 bg-amber-500/10 p-1.5 rounded-lg">
-                          <span><FontAwesomeIcon icon={faCoffee} size={10} className="mr-1" /> Makanan:</span>
-                          <span className="font-bold">Rp {totalBelanjaFB.toLocaleString("id-ID")}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex justify-between items-center bg-slate-950/60 p-2.5 rounded-xl mb-3">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">TOTAL</span>
-                      <span className="text-lg font-black text-emerald-400 font-mono">Rp {totalTagihan.toLocaleString("id-ID")}</span>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      {statusSekarang === "Pending" ? (
-                        <>
-                          <button 
-                            onClick={() => ubahStatusMeja(meja.id, "Playing", namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
-                            className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-pointer transition-all active:scale-95"
-                          >
-                            <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
-                          </button>
-                          <button 
-                            onClick={() => batalkanBookingPending(meja.id, nomorMeja, namaPelanggan)} 
-                            className="px-3 bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl cursor-pointer hover:bg-rose-500/30 transition-all"
-                            title="Batalkan"
-                          >
-                            <FontAwesomeIcon icon={faTrash} size={13} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button disabled className="flex-1 bg-slate-800/50 text-slate-600 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider cursor-not-allowed">
-                            <FontAwesomeIcon icon={faPlay} size={10} className="mr-1" /> START MAIN
-                          </button>
-                          <button 
-                            onClick={() => ubahStatusMeja(meja.id, "Selesai", namaPelanggan, nomorMeja, totalBiayaSewa, totalBelanjaFB, durasiBermain, pesananFB)} 
-                            className={`flex-1 font-bold py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all ${isExpired ? "bg-red-600 hover:bg-red-500" : "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500"} cursor-pointer active:scale-95`}
-                          >
-                            <FontAwesomeIcon icon={faStop} size={10} className="mr-1" /> STOP & BAYAR
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
+              mejaTerfilter.map((meja) => (
+                <MejaCard
+                  key={meja.id}
+                  meja={meja}
+                  onPindahMeja={tanganiPindahMeja}
+                  onOrderMakanan={(id, nomorMeja, pesanan) => {
+                    setModalFB({ 
+                      isOpen: true, 
+                      mejaId: id, 
+                      nomorMeja: nomorMeja, 
+                      pesananSaatIni: pesanan 
+                    });
+                  }}
+                  onSewaMeja={sewaMeja}
+                  onExtendWaktu={extendWaktu}
+                />
+              ))
             )}
           </div>
         )}
@@ -890,6 +809,15 @@ export default function KasirDashboard() {
           </div>
         </div>
       )}
+
+      {/* MODAL BAYAR DI MUKA */}
+      <ModalBayarDulu
+        isOpen={modalBayar.isOpen}
+        onClose={() => setModalBayar({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 })}
+        onBayar={prosesBayarDulu}
+        meja={modalBayar.meja?.nomor_meja}
+        totalBiaya={modalBayar.totalBiaya}
+      />
 
       <style>{`
         @media print {

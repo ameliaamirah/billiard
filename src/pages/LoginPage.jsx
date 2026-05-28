@@ -11,31 +11,42 @@ export default function LoginPage({ roleLogin }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleLogin = (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
     setTimeout(() => {
+      // Data user yang valid - tanpa toLowerCase()
       const validUsers = [
         { username: "admin", password: "admin123", role: "admin" },
         { username: "kasir", password: "kasir123", role: "kasir" }
       ];
 
+      // LANGSUNG BANDINGKAN tanpa toLowerCase() - gunakan username asli
       const userFound = validUsers.find(
-        (u) => u.username === username.toLowerCase() && u.password === password
+        (u) => u.username === username && u.password === password
       );
 
       if (userFound) {
-        setLoading(false);
         localStorage.setItem("token", "simulated_frontend_token_xyz123");
         localStorage.setItem("role", userFound.role);
         localStorage.setItem("username", userFound.username);
+        localStorage.setItem("isLoggedIn", "true");
         
-        navigate(userFound.role === "admin" ? "/admin-dashboard" : "/kasir-dashboard");
+        setLoading(false);
+        
+        // Redirect sesuai role
+        if (userFound.role === "admin") {
+          navigate("/admin-dashboard");
+        } else {
+          navigate("/kasir-dashboard");
+        }
       } else {
         setLoading(false);
-        alert(`Gagal Login: Username atau password untuk ${roleLogin} tidak sesuai.`);
+        setError(`Gagal Login: Username atau password untuk ${roleLogin} tidak sesuai.`);
       }
     }, 1000);
   };
@@ -65,7 +76,7 @@ export default function LoginPage({ roleLogin }) {
                 <FontAwesomeIcon icon={faUser} className="absolute left-4 top-4 text-slate-600 group-focus-within:text-[#00ff99] transition-colors" />
                 <input
                   type="text"
-                  placeholder="admin"
+                  placeholder="Masukkan username"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -95,6 +106,12 @@ export default function LoginPage({ roleLogin }) {
                 </button>
               </div>
             </div>
+
+            {error && (
+              <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-3">
+                <p className="text-red-400 text-xs text-center">{error}</p>
+              </div>
+            )}
 
             <button
               type="submit"

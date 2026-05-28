@@ -1,21 +1,15 @@
 import { useState, useEffect } from 'react';
 
-/**
- * Custom hook untuk menghitung mundur waktu
- * @param {number} endTime - Timestamp selesai (Date.now() + durasi dalam milidetik)
- * @returns {object} - Mengembalikan sisa waktu dalam milidetik dan format string
- */
 export const useCountdown = (endTime) => {
-  // Hitung sisa waktu saat pertama kali dimuat
   const [timeLeft, setTimeLeft] = useState(() => {
+    if (!endTime) return 0;
     const remaining = endTime - Date.now();
     return remaining > 0 ? remaining : 0;
   });
 
   useEffect(() => {
-    // Jika waktu sudah habis, tidak perlu menjalankan interval
-    if (timeLeft <= 0) return;
-
+    if (!endTime) return;
+    
     const interval = setInterval(() => {
       const remaining = endTime - Date.now();
       
@@ -27,17 +21,16 @@ export const useCountdown = (endTime) => {
       }
     }, 1000);
 
-    // Bersihkan interval saat komponen di-unmount atau endTime berubah
     return () => clearInterval(interval);
-  }, [endTime, timeLeft]);
+  }, [endTime]);
 
-  // Kalkulasi format HH:MM:SS
   const hours = Math.floor(timeLeft / (1000 * 60 * 60));
   const minutes = Math.floor((timeLeft / (1000 * 60)) % 60);
   const seconds = Math.floor((timeLeft / 1000) % 60);
 
-  // Format string untuk tampilan
-  const formatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const formatted = !endTime ? "00:00:00" : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const isExpired = timeLeft <= 0;
+  const isExpiring = !isExpired && timeLeft < 1800000;
 
-  return { timeLeft, formatted };
+  return { formatted, isExpired, isExpiring, timeLeft };
 };

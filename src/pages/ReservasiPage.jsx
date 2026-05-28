@@ -29,13 +29,16 @@ export default function ReservasiPage() {
   const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
 
   // JAM OPERASIONAL (dalam menit)
+  // Senin - Jumat: 10:00 - 02:00 (26*60 = 1560 menit)
+  // Sabtu - Minggu: 10:00 - 03:00 (27*60 = 1620 menit)
   const JAM_BUKA = {
-    weekday: { start: 10 * 60, end: 26 * 60 }, // Senin - Jumat (10:00 - 02:00)
-    weekend: { start: 10 * 60, end: 27 * 60 }  // Sabtu - Minggu (10:00 - 03:00)
+    weekday: { start: 10 * 60, end: 26 * 60 }, // 10:00 - 02:00
+    weekend: { start: 10 * 60, end: 27 * 60 }  // 10:00 - 03:00
   };
 
   // Konversi jam ke menit
   const timeToMinutes = (time) => {
+    if (!time) return 0;
     const [hours, minutes] = time.split(":").map(Number);
     return hours * 60 + minutes;
   };
@@ -50,24 +53,33 @@ export default function ReservasiPage() {
   // Fungsi untuk mendapatkan hari dalam seminggu
   const getDayType = (date) => {
     const day = new Date(date).getDay();
+    // 0 = Minggu, 6 = Sabtu
     if (day === 0 || day === 6) return "weekend";
     return "weekday";
   };
 
-  // 🔥 CEK APAKAH JAM + DURASI MASIH DALAM JAM OPERASIONAL
+  // CEK APAKAH JAM + DURASI MASIH DALAM JAM OPERASIONAL
   const isWithinOperatingHours = (jamMulai, durasiJam, tanggal) => {
     const dayType = getDayType(tanggal);
     const jamMulaiMenit = timeToMinutes(jamMulai);
     const jamSelesaiMenit = jamMulaiMenit + (durasiJam * 60);
     const batasOperasional = JAM_BUKA[dayType].end;
     
+    // Cek apakah jam mulai sebelum jam buka
     if (jamMulaiMenit < JAM_BUKA[dayType].start) {
       return { valid: false, reason: `Jam buka dimulai pukul 10:00` };
     }
     
+    // Cek apakah selesai melebihi jam operasional
     if (jamSelesaiMenit > batasOperasional) {
       const maxJam = minutesToTime(batasOperasional);
       const maxDurasi = Math.floor((batasOperasional - jamMulaiMenit) / 60);
+      if (maxDurasi <= 0) {
+        return { 
+          valid: false, 
+          reason: `Jam mulai ${jamMulai} terlalu dekat dengan jam tutup.` 
+        };
+      }
       return { 
         valid: false, 
         reason: `Waktu bermain akan melebihi jam operasional (berakhir pukul ${maxJam}). Maksimal durasi ${maxDurasi} jam.` 
@@ -77,33 +89,37 @@ export default function ReservasiPage() {
     return { valid: true, reason: "" };
   };
 
-  // Generate daftar jam yang tersedia berdasarkan tanggal
+  // Generate daftar jam yang tersedia berdasarkan tanggal (DIPERBAIKI)
   const getAvailableHours = (tanggal) => {
     const dayType = getDayType(tanggal);
-    const startHour = JAM_BUKA[dayType].start / 60;
-    const endHour = JAM_BUKA[dayType].end / 60;
+    const endHourValue = JAM_BUKA[dayType].end / 60; // 26 atau 27
     const availableHours = [];
     
-    for (let hour = startHour; hour <= endHour; hour++) {
-      let displayHour = hour;
-      let labelSuffix = "";
-      
-      if (hour >= 24) {
-        displayHour = hour - 24;
-        labelSuffix = " (esok hari)";
-      }
-      
-      const hourString = displayHour.toString().padStart(2, "0") + ":00";
+    // Jam 10:00 - 23:00 (siang sampai malam)
+    for (let i = 10; i <= 23; i++) {
+      const hourString = i.toString().padStart(2, "0") + ":00";
       availableHours.push({
         value: hourString,
-        label: `${hourString}${labelSuffix}`
+        label: hourString
+      });
+    }
+    
+    // Jam dini hari (00:00, 01:00, 02:00, dst) sesuai batas
+    // endHourValue - 24 = jumlah jam dini hari yang tersedia
+    // Contoh: weekday endHour=26 → 26-24=2 → jam 00:00, 01:00
+    // Contoh: weekend endHour=27 → 27-24=3 → jam 00:00, 01:00, 02:00
+    for (let i = 0; i < endHourValue - 24; i++) {
+      const hourString = i.toString().padStart(2, "0") + ":00";
+      availableHours.push({
+        value: hourString,
+        label: `${hourString} (esok hari)`
       });
     }
     
     return availableHours;
   };
 
-  // 🔥 Filter jam berdasarkan durasi (agar tidak melebihi jam operasional)
+  // Filter jam berdasarkan durasi (agar tidak melebihi jam operasional)
   const getAvailableHoursWithDuration = (tanggal, durasi) => {
     const allHours = getAvailableHours(tanggal);
     return allHours.filter(hour => {
@@ -112,8 +128,9 @@ export default function ReservasiPage() {
     });
   };
 
-  // 🔥 CEK TABRAKAN WAKTU (memperhitungkan durasi)
+  // CEK TABRAKAN WAKTU (memperhitungkan durasi)
   const isTimeConflict = (existingJam, existingDurasi, newJam, newDurasi) => {
+    if (!existingJam || existingJam === "-") return false;
     const existingStart = timeToMinutes(existingJam);
     const existingEnd = existingStart + (existingDurasi * 60);
     const newStart = timeToMinutes(newJam);
@@ -122,7 +139,7 @@ export default function ReservasiPage() {
     return (newStart < existingEnd && newEnd > existingStart);
   };
 
-  // 🔥 CEK APAKAH MEJA TERSEDIA UNTUK RENTANG WAKTU TERTENTU
+  // CEK APAKAH MEJA TERSEDIA UNTUK RENTANG WAKTU TERTENTU
   const isMejaTersedia = (meja, jam, durasi) => {
     const reservasiMeja = reservasiAktif.filter(r => r.nomor_meja === meja);
     for (const reservasi of reservasiMeja) {
@@ -178,6 +195,12 @@ export default function ReservasiPage() {
   };
 
   const handleDurasiChange = (newDurasi) => {
+    if (newDurasi < 1) return;
+    if (newDurasi > 4) {
+      alert("Durasi maksimal 4 jam!");
+      return;
+    }
+    
     setForm({...form, durasi: newDurasi});
     setErrorWaktu("");
     
@@ -225,6 +248,10 @@ export default function ReservasiPage() {
     }
     if (!form.nohp.trim()) {
       alert("Harap masukkan nomor WhatsApp!");
+      return;
+    }
+    if (!form.nohp.match(/^\d{10,13}$/)) {
+      alert("Nomor WhatsApp harus berupa angka (10-13 digit)!");
       return;
     }
     
@@ -290,9 +317,6 @@ export default function ReservasiPage() {
       setLoading(false);
     }
   };
-
-  const dayType = getDayType(form.tanggal);
-  const jamOperasional = JAM_BUKA[dayType];
 
   return (
     <div className="min-h-screen bg-[#020a05] text-white pt-28 pb-16 px-6 relative overflow-hidden flex items-center justify-center">

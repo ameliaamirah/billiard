@@ -15,7 +15,11 @@ export default function LoginKasirPage() {
     
     setTimeout(() => {
       if (username === "kasir" && password === "kasir123") {
+        // ✅ TAMBAHKAN INI - Simpan role dan status login
         localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("role", "kasir");  // <-- TAMBAHKAN INI
+        localStorage.setItem("username", username);  // <-- TAMBAHKAN INI (opsional)
+        
         navigate("/kasir-dashboard");
       } else {
         alert("Username atau Password salah.");

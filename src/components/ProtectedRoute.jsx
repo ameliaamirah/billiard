@@ -1,34 +1,38 @@
+import React from "react";
 import { Navigate } from "react-router-dom";
 
 export default function ProtectedRoute({ children, allowedRole }) {
   const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   const role = localStorage.getItem("role");
 
-  /* ==========================================================
-     JIKA BELUM LOGIN: 
-     Arahkan ke rute login masing-masing, bukan ke halaman utama
-     ========================================================== */
+  console.log("=== DEBUG ProtectedRoute ===");
+  console.log("isLoggedIn:", isLoggedIn);
+  console.log("role yang tersimpan:", role);
+  console.log("allowedRole yang diizinkan:", allowedRole);
+
+  // Jika belum login, redirect ke login
   if (!isLoggedIn) {
-    if (allowedRole === "admin") {
-      return <Navigate to="/admin" replace />;
-    }
-    return <Navigate to="/kasir" replace />;
+    console.log("Belum login, redirect ke /login");
+    return <Navigate to="/login" replace />;
   }
 
-  /* ==========================================================
-     JIKA ROLE TIDAK SESUAI (Misal: Kasir maksa masuk ke Admin)
-     ========================================================== */
+  // Jika role tidak sesuai dengan allowedRole
   if (allowedRole && role !== allowedRole) {
-    // Kembalikan ke halaman dashboard yang menjadi haknya
-    if (role === "kasir") return <Navigate to="/kasir-dashboard" replace />;
-    if (role === "admin") return <Navigate to="/admin-dashboard" replace />;
+    console.log(`Role ${role} tidak sama dengan ${allowedRole}, redirect ke dashboard yang sesuai`);
     
-    // Jika data role rusak, paksa login ulang
-    return <Navigate to="/kasir" replace />;
+    // Jika dia admin tapi mencoba akses halaman kasir
+    if (role === "admin") {
+      console.log("Redirect ke /admin-dashboard");
+      return <Navigate to="/admin-dashboard" replace />;
+    }
+    // Jika dia kasir tapi mencoba akses halaman admin
+    if (role === "kasir") {
+      console.log("Redirect ke /kasir-dashboard");
+      return <Navigate to="/kasir-dashboard" replace />;
+    }
+    return <Navigate to="/login" replace />;
   }
 
-  /* ==========================================
-     JIKA LOLOS VALIDASI, MELEWATI GERBANG
-     ========================================== */
+  console.log("Akses diizinkan");
   return children;
 }
