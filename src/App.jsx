@@ -13,8 +13,9 @@ import Reservasi from "./pages/ReservasiPage";
 import LoginKasirPage from "./pages/LoginKasirPage";
 import LoginAdminPage from "./pages/LoginAdminPage";
 import AdminDashboard from "./pages/AdminDashboard";
-import DashboardUtamaKasir from "./pages/DashboardUtamaKasir"; 
-
+import DashboardUtamaKasir from "./pages/DashboardUtamaKasir";
+import MenuManagement from "./pages/MenuManagement";
+import MonitorKasir from "./pages/MonitorKasir"; 
 /* =========================================
    COMPONENTS
 ========================================= */
@@ -28,45 +29,37 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function LayoutUtama() {
   const location = useLocation();
 
-  // 1. Sembunyikan Navbar di halaman login & dashboard internal saja (Di Beranda TETAP MUNCUL)
   const hideNavbar =
     location.pathname === "/admin" ||
     location.pathname === "/kasir" ||
     location.pathname === "/admin-dashboard" ||
-    location.pathname === "/kasir-dashboard";
+    location.pathname === "/kasir-dashboard" ||
+    location.pathname === "/menu-management" ||
+    location.pathname === "/monitor";  // ✅ TAMBAHKAN
 
-  // 2. Sembunyikan Footer di halaman login, dashboard, DAN HALAMAN BERANDA ("/")
   const hideFooter =
     location.pathname === "/" || 
     location.pathname === "/admin" ||
     location.pathname === "/kasir" ||
     location.pathname === "/admin-dashboard" ||
-    location.pathname === "/kasir-dashboard";
+    location.pathname === "/kasir-dashboard" ||
+    location.pathname === "/menu-management" ||
+    location.pathname === "/monitor";  // ✅ TAMBAHKAN
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
-
-      {/* NAVBAR */}
       {!hideNavbar && <Navbar />}
-
       <div className="flex-grow">
         <Routes>
-
-          {/* =========================
-              PUBLIC / PELANGGAN
-          ========================= */}
+          {/* PUBLIC */}
           <Route path="/" element={<HomePage />} />
           <Route path="/reservasi" element={<Reservasi />} />
 
-          {/* =========================
-              LOGIN FORM (MURNI FRONTEND)
-          ========================= */}
+          {/* LOGIN */}
           <Route path="/admin" element={<LoginAdminPage />} />
           <Route path="/kasir" element={<LoginKasirPage />} />
 
-          {/* =========================
-              ADMIN DASHBOARD
-          ========================= */}
+          {/* ADMIN DASHBOARD */}
           <Route
             path="/admin-dashboard"
             element={
@@ -76,9 +69,7 @@ function LayoutUtama() {
             }
           />
 
-          {/* =========================
-              DASHBOARD UTAMA KASIR
-          ========================= */}
+          {/* KASIR DASHBOARD */}
           <Route
             path="/kasir-dashboard"
             element={
@@ -88,19 +79,32 @@ function LayoutUtama() {
             }
           />
 
+          {/* MENU MANAGEMENT */}
+          <Route
+            path="/menu-management"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <MenuManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ✅ TAMBAHKAN ROUTE MONITOR KASIR */}
+          <Route
+            path="/monitor"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <MonitorKasir />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </div>
-
-      {/* FOOTER (Otomatis hilang di Beranda, Login, dan area kerja Dashboard) */}
       {!hideFooter && <Footer />}
-
     </div>
   );
 }
 
-/* =========================================
-   APP MAIN ENTRY
-========================================= */
 export default function App() {
   return (
     <Router>

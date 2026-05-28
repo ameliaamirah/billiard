@@ -28,23 +28,63 @@ export default function ReservasiPage() {
 
   const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
 
+  // JAM OPERASIONAL (dalam menit)
   const JAM_BUKA = {
-    weekday: { start: 10, end: 26 },
-    weekend: { start: 10, end: 27 }
+    weekday: { start: 10 * 60, end: 26 * 60 }, // Senin - Jumat (10:00 - 02:00)
+    weekend: { start: 10 * 60, end: 27 * 60 }  // Sabtu - Minggu (10:00 - 03:00)
   };
 
+  // Konversi jam ke menit
+  const timeToMinutes = (time) => {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Konversi menit ke format HH:MM
+  const minutesToTime = (minutes) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  };
+
+  // Fungsi untuk mendapatkan hari dalam seminggu
   const getDayType = (date) => {
     const day = new Date(date).getDay();
     if (day === 0 || day === 6) return "weekend";
     return "weekday";
   };
 
+  // 🔥 CEK APAKAH JAM + DURASI MASIH DALAM JAM OPERASIONAL
+  const isWithinOperatingHours = (jamMulai, durasiJam, tanggal) => {
+    const dayType = getDayType(tanggal);
+    const jamMulaiMenit = timeToMinutes(jamMulai);
+    const jamSelesaiMenit = jamMulaiMenit + (durasiJam * 60);
+    const batasOperasional = JAM_BUKA[dayType].end;
+    
+    if (jamMulaiMenit < JAM_BUKA[dayType].start) {
+      return { valid: false, reason: `Jam buka dimulai pukul 10:00` };
+    }
+    
+    if (jamSelesaiMenit > batasOperasional) {
+      const maxJam = minutesToTime(batasOperasional);
+      const maxDurasi = Math.floor((batasOperasional - jamMulaiMenit) / 60);
+      return { 
+        valid: false, 
+        reason: `Waktu bermain akan melebihi jam operasional (berakhir pukul ${maxJam}). Maksimal durasi ${maxDurasi} jam.` 
+      };
+    }
+    
+    return { valid: true, reason: "" };
+  };
+
+  // Generate daftar jam yang tersedia berdasarkan tanggal
   const getAvailableHours = (tanggal) => {
     const dayType = getDayType(tanggal);
-    const maxHour = JAM_BUKA[dayType].end;
+    const startHour = JAM_BUKA[dayType].start / 60;
+    const endHour = JAM_BUKA[dayType].end / 60;
     const availableHours = [];
     
-    for (let hour = JAM_BUKA[dayType].start; hour <= maxHour; hour++) {
+    for (let hour = startHour; hour <= endHour; hour++) {
       let displayHour = hour;
       let labelSuffix = "";
       
@@ -63,9 +103,13 @@ export default function ReservasiPage() {
     return availableHours;
   };
 
-  const timeToMinutes = (time) => {
-    const [hours, minutes] = time.split(":").map(Number);
-    return hours * 60 + minutes;
+  // 🔥 Filter jam berdasarkan durasi (agar tidak melebihi jam operasional)
+  const getAvailableHoursWithDuration = (tanggal, durasi) => {
+    const allHours = getAvailableHours(tanggal);
+    return allHours.filter(hour => {
+      const check = isWithinOperatingHours(hour.value, durasi, tanggal);
+      return check.valid;
+    });
   };
 
   // 🔥 CEK TABRAKAN WAKTU (memperhitungkan durasi)
@@ -76,6 +120,17 @@ export default function ReservasiPage() {
     const newEnd = newStart + (newDurasi * 60);
     
     return (newStart < existingEnd && newEnd > existingStart);
+  };
+
+  // 🔥 CEK APAKAH MEJA TERSEDIA UNTUK RENTANG WAKTU TERTENTU
+  const isMejaTersedia = (meja, jam, durasi) => {
+    const reservasiMeja = reservasiAktif.filter(r => r.nomor_meja === meja);
+    for (const reservasi of reservasiMeja) {
+      if (isTimeConflict(reservasi.jam_mulai, reservasi.durasi_bermain, jam, durasi)) {
+        return false;
+      }
+    }
+    return true;
   };
 
   const fetchReservasiAktif = async (tanggal) => {
@@ -97,16 +152,6 @@ export default function ReservasiPage() {
     }
   };
 
-  const isMejaTersedia = (meja, jam, durasi) => {
-    const reservasiMeja = reservasiAktif.filter(r => r.nomor_meja === meja);
-    for (const reservasi of reservasiMeja) {
-      if (isTimeConflict(reservasi.jam_mulai, reservasi.durasi_bermain, jam, durasi)) {
-        return false;
-      }
-    }
-    return true;
-  };
-
   const getMejaTersedia = (jam, durasi) => {
     return daftarMeja.filter(meja => isMejaTersedia(meja, jam, durasi));
   };
@@ -124,7 +169,10 @@ export default function ReservasiPage() {
     setForm({...form, jam: newJam});
     setErrorWaktu("");
     
-    if (!isMejaTersedia(form.meja, newJam, form.durasi)) {
+    const check = isWithinOperatingHours(newJam, form.durasi, form.tanggal);
+    if (!check.valid) {
+      setErrorWaktu(check.reason);
+    } else if (!isMejaTersedia(form.meja, newJam, form.durasi)) {
       setErrorWaktu(`⚠️ Meja ${form.meja} sudah dipesan pada jam tersebut`);
     }
   };
@@ -133,19 +181,31 @@ export default function ReservasiPage() {
     setForm({...form, durasi: newDurasi});
     setErrorWaktu("");
     
-    if (!isMejaTersedia(form.meja, form.jam, newDurasi)) {
+    const check = isWithinOperatingHours(form.jam, newDurasi, form.tanggal);
+    if (!check.valid) {
+      setErrorWaktu(check.reason);
+    } else if (!isMejaTersedia(form.meja, form.jam, newDurasi)) {
       setErrorWaktu(`⚠️ Dengan durasi ${newDurasi} jam, meja ${form.meja} sudah dipesan`);
     }
   };
 
   const mejaTersediaList = getMejaTersedia(form.jam, form.durasi);
   const isMejaSaatIniTersedia = mejaTersediaList.includes(form.meja);
+  const availableHours = getAvailableHoursWithDuration(form.tanggal, form.durasi);
+  const isJamValid = availableHours.some(h => h.value === form.jam);
+  const isFormValid = isMejaSaatIniTersedia && isJamValid && !errorWaktu;
 
   useEffect(() => {
     if (form.meja && !isMejaSaatIniTersedia && mejaTersediaList.length > 0) {
       setForm(prev => ({ ...prev, meja: mejaTersediaList[0] }));
     }
   }, [form.jam, form.durasi, form.tanggal]);
+
+  useEffect(() => {
+    if (form.jam && !isJamValid && availableHours.length > 0) {
+      setForm(prev => ({ ...prev, jam: availableHours[0].value }));
+    }
+  }, [form.durasi, form.tanggal]);
 
   useEffect(() => {
     fetchReservasiAktif(form.tanggal);
@@ -167,6 +227,14 @@ export default function ReservasiPage() {
       alert("Harap masukkan nomor WhatsApp!");
       return;
     }
+    
+    // Validasi jam operasional
+    const check = isWithinOperatingHours(form.jam, form.durasi, form.tanggal);
+    if (!check.valid) {
+      alert(check.reason);
+      return;
+    }
+    
     if (!isMejaSaatIniTersedia) {
       alert(`⚠️ Meja ${form.meja} sudah dipesan pada jam ${form.jam}. Silakan pilih meja lain.`);
       return;
@@ -195,10 +263,12 @@ export default function ReservasiPage() {
       }
 
       const idBooking = "RC-" + Date.now().toString().slice(-8);
+      const idNumerik = Date.now();
+
       const { error } = await supabase
         .from("reservasi_billiard")
         .insert([{
-          id: Date.now(),
+          id: idNumerik,
           id_booking: idBooking,
           nomor_meja: form.meja,
           nama_pelanggan: form.nama.trim(),
@@ -221,8 +291,8 @@ export default function ReservasiPage() {
     }
   };
 
-  const availableHours = getAvailableHours(form.tanggal);
-  const isFormValid = isMejaSaatIniTersedia && !errorWaktu;
+  const dayType = getDayType(form.tanggal);
+  const jamOperasional = JAM_BUKA[dayType];
 
   return (
     <div className="min-h-screen bg-[#020a05] text-white pt-28 pb-16 px-6 relative overflow-hidden flex items-center justify-center">
@@ -333,7 +403,9 @@ export default function ReservasiPage() {
                 <select
                   value={form.jam}
                   onChange={handleJamChange}
-                  className="w-full bg-slate-900/60 border border-slate-800 p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm cursor-pointer appearance-none"
+                  className={`w-full bg-slate-900/60 border p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm cursor-pointer appearance-none ${
+                    errorWaktu ? 'border-red-500' : 'border-slate-800'
+                  }`}
                 >
                   {availableHours.map((hour) => (
                     <option key={hour.value} value={hour.value}>
@@ -342,10 +414,34 @@ export default function ReservasiPage() {
                   ))}
                 </select>
               </div>
+              {errorWaktu && (
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-red-400">
+                  <FontAwesomeIcon icon={faExclamationTriangle} size={10} />
+                  <span>{errorWaktu}</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 🔥 DURASI BERMAIN - INI YANG HILANG, SEKARANG DITAMBAHKAN */}
+          {/* Informasi Jam Operasional */}
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
+            <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1">📅 Jam Operasional</p>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Senin - Jumat:</span>
+                <span className="text-white font-mono">10:00 - 02:00</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Sabtu - Minggu:</span>
+                <span className="text-[#00ff99] font-mono">10:00 - 03:00</span>
+              </div>
+            </div>
+            <p className="text-[8px] text-slate-500 mt-2 italic">
+              *Jam 00:00 - 02:00 (Senin-Jumat) dan 00:00 - 03:00 (Sabtu-Minggu) berarti esok hari
+            </p>
+          </div>
+
+          {/* Durasi Bermain */}
           <div className="space-y-2">
             <label className="text-[11px] font-black uppercase tracking-widest text-[#00ff99]">Durasi Bermain</label>
             <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
@@ -367,24 +463,6 @@ export default function ReservasiPage() {
                 <FontAwesomeIcon icon={faPlus} />
               </button>
             </div>
-          </div>
-
-          {/* Informasi Jam Operasional */}
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3">
-            <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-1">📅 Jam Operasional</p>
-            <div className="grid grid-cols-2 gap-2 text-[10px]">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Senin - Jumat:</span>
-                <span className="text-white font-mono">10:00 - 02:00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Sabtu - Minggu:</span>
-                <span className="text-[#00ff99] font-mono">10:00 - 03:00</span>
-              </div>
-            </div>
-            <p className="text-[8px] text-slate-500 mt-2 italic">
-              *Jam 00:00 - 02:00 (Senin-Jumat) dan 00:00 - 03:00 (Sabtu-Minggu) berarti esok hari
-            </p>
           </div>
 
           {/* Estimasi Biaya */}
@@ -418,7 +496,7 @@ export default function ReservasiPage() {
                 <span>Mengirim ke Kasir...</span>
               </>
             ) : (
-              !isFormValid ? "Meja Tidak Tersedia" : "Konfirmasi & Kirim Ke Kasir"
+              !isFormValid ? "Jam atau Meja Tidak Tersedia" : "Konfirmasi & Kirim Ke Kasir"
             )}
           </button>
         </form>
