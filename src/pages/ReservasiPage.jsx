@@ -43,10 +43,17 @@ export default function ReservasiPage() {
     return hours * 60 + minutes;
   };
 
-  // Konversi menit ke format HH:MM
+  // Konversi menit ke format HH:MM (DIPERBAIKI - tidak menampilkan 26:00)
   const minutesToTime = (minutes) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
+    
+    // Jika jam >= 24, berarti esok hari
+    if (hours >= 24) {
+      const displayHour = hours - 24;
+      return `${displayHour.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")} (esok hari)`;
+    }
+    
     return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
   };
 
@@ -89,7 +96,7 @@ export default function ReservasiPage() {
     return { valid: true, reason: "" };
   };
 
-  // Generate daftar jam yang tersedia berdasarkan tanggal (DIPERBAIKI)
+  // Generate daftar jam yang tersedia berdasarkan tanggal
   const getAvailableHours = (tanggal) => {
     const dayType = getDayType(tanggal);
     const endHourValue = JAM_BUKA[dayType].end / 60; // 26 atau 27
@@ -105,9 +112,6 @@ export default function ReservasiPage() {
     }
     
     // Jam dini hari (00:00, 01:00, 02:00, dst) sesuai batas
-    // endHourValue - 24 = jumlah jam dini hari yang tersedia
-    // Contoh: weekday endHour=26 → 26-24=2 → jam 00:00, 01:00
-    // Contoh: weekend endHour=27 → 27-24=3 → jam 00:00, 01:00, 02:00
     for (let i = 0; i < endHourValue - 24; i++) {
       const hourString = i.toString().padStart(2, "0") + ":00";
       availableHours.push({

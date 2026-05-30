@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faSearch, faCoffee, faHistory, faPrint, 
   faTimes, faLock, faUser, faClock, faMoneyBillWave, faCheck,
-  faReceipt, faFileExcel, faFilePdf, faPlus
+  faReceipt, faFileExcel, faFilePdf, faPlus, faPlay, faStop, faTag
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -12,6 +12,8 @@ import autoTable from "jspdf-autotable";
 import FandBModal from "../components/FandBModal";
 import MejaCard from "../components/MejaCard";
 import ModalBayarDulu from "../components/ModalBayarDulu";
+import ModalDiskon from "../features/diskon/ModalDiskon";
+import useDiskon from "../features/diskon/useDiskon";
 import { supabase } from "../supabaseClient";
 
 export default function KasirDashboard() {
@@ -26,6 +28,9 @@ export default function KasirDashboard() {
   const [modalStruk, setModalStruk] = useState({ isOpen: false, data: null });
   const [modalClosing, setModalClosing] = useState({ isOpen: false, reportData: null });
   const [modalBayar, setModalBayar] = useState({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 });
+  const [modalDiskon, setModalDiskon] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pelanggan: "", totalSebelumDiskon: 0 });
+
+  const { diskonAktif, applyDiskon, resetDiskon, hitungTotalSetelahDiskon } = useDiskon();
 
   const getHargaPerJam = (nomorMeja) => {
     if (!nomorMeja) return 50000;
@@ -62,14 +67,45 @@ export default function KasirDashboard() {
     }
   };
 
+  // Fungsi untuk membatalkan reservasi yang sudah lewat tanggal
+  const batalkanReservasiKadaluarsa = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { data: kadaluarsa, error: selectError } = await supabase
+        .from("reservasi_billiard")
+        .select("*")
+        .lt("tanggal_main", today)
+        .in("status_pemesanan", ["Pending", "Sudah Dibayar", "Playing"]);
+      
+      if (selectError) throw selectError;
+      
+      if (kadaluarsa && kadaluarsa.length > 0) {
+        for (const reservasi of kadaluarsa) {
+          await supabase.from("reservasi_billiard").delete().eq("id", reservasi.id);
+        }
+        await fetchData();
+        if (kadaluarsa.length > 0) {
+          alert(`⚠️ ${kadaluarsa.length} reservasi kadaluarsa otomatis dibatalkan!`);
+        }
+      }
+    } catch (error) {
+      console.error("Error membatalkan reservasi kadaluarsa:", error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    batalkanReservasiKadaluarsa();
     
     const channelReservasi = supabase
       .channel('reservasi_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'reservasi_billiard' }, 
-        () => fetchData()
+        () => {
+          fetchData();
+          batalkanReservasiKadaluarsa();
+        }
       )
       .subscribe();
     
@@ -104,6 +140,7 @@ export default function KasirDashboard() {
         "Durasi": `${item.durasi || 1} Jam`,
         "Sewa Meja": item.total_sewa || 0,
         "Kantin/F&B": item.total_fb || 0,
+        "Diskon": item.diskon || 0,
         "Total": item.total_akhir || 0,
         "Metode Bayar": item.metode_pembayaran?.toUpperCase() || "-",
       }));
@@ -111,10 +148,11 @@ export default function KasirDashboard() {
       const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
       const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
       const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
       
       exportData.push({
         "No": "", "Tanggal": "", "Nomor Struk": "", "Meja": "", "Pelanggan": "", "Durasi": "",
-        "Sewa Meja": totalSewa, "Kantin/F&B": totalKantin, "Total": totalOmset, "Metode Bayar": "TOTAL",
+        "Sewa Meja": totalSewa, "Kantin/F&B": totalKantin, "Diskon": totalDiskon, "Total": totalOmset, "Metode Bayar": "TOTAL",
       });
       
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -161,6 +199,7 @@ export default function KasirDashboard() {
         `${item.durasi || 1} Jam`,
         `Rp ${(item.total_sewa || 0).toLocaleString("id-ID")}`,
         `Rp ${(item.total_fb || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.diskon || 0).toLocaleString("id-ID")}`,
         `Rp ${(item.total_akhir || 0).toLocaleString("id-ID")}`,
         item.metode_pembayaran?.toUpperCase() || "-",
       ]);
@@ -168,17 +207,19 @@ export default function KasirDashboard() {
       const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
       const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
       const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
       
       autoTable(doc, {
         startY: 55,
-        head: [["No", "Tanggal", "No. Struk", "Meja", "Pelanggan", "Durasi", "Sewa", "Kantin", "Total", "Metode"]],
+        head: [["No", "Tanggal", "No. Struk", "Meja", "Pelanggan", "Durasi", "Sewa", "Kantin", "Diskon", "Total", "Metode"]],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [0, 100, 0], textColor: 255, fontStyle: 'bold' },
         foot: [[
-          "", "", "", "", "", "",
+          "", "", "", "", "", "", "",
           { content: `Rp ${totalSewa.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
           { content: `Rp ${totalKantin.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalDiskon.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
           { content: `Rp ${totalOmset.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold', textColor: [0, 100, 0] } },
           "TOTAL"
         ]],
@@ -190,6 +231,148 @@ export default function KasirDashboard() {
     } catch (error) {
       console.error("Error export PDF:", error);
       alert("Gagal export PDF: " + error.message);
+    }
+  };
+
+  // ==================== FUNGSI MULAI MAIN ====================
+  const mulaiMain = async (id, nomorMeja) => {
+    const { data: mejaData, error: fetchError } = await supabase
+      .from("reservasi_billiard")
+      .select("jam_mulai, tanggal_main, durasi_bermain, nama_pelanggan")
+      .eq("id", id)
+      .single();
+    
+    if (fetchError) {
+      console.error("Error fetching meja data:", fetchError);
+      alert("Gagal memuat data meja!");
+      return;
+    }
+    
+    const now = new Date();
+    const jamSekarang = now.getHours();
+    const menitSekarang = now.getMinutes();
+    
+    const [jamJadwal, menitJadwal] = (mejaData.jam_mulai || "00:00").split(":").map(Number);
+    
+    const waktuSekarangMenit = (jamSekarang * 60) + menitSekarang;
+    const waktuJadwalMenit = (jamJadwal * 60) + (menitJadwal || 0);
+    const selisihMenit = waktuJadwalMenit - waktuSekarangMenit;
+    
+    if (selisihMenit < -15) {
+      alert(`⚠️ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nSudah terlambat lebih dari 15 menit. Reservasi akan dibatalkan.`);
+      await supabase.from("reservasi_billiard").delete().eq("id", id);
+      await fetchData();
+      return;
+    }
+    
+    if (selisihMenit > 30) {
+      const jamTunggu = Math.floor(selisihMenit / 60);
+      const menitTunggu = selisihMenit % 60;
+      alert(`⚠️ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nMasih terlalu awal (${jamTunggu > 0 ? jamTunggu + " jam " : ""}${menitTunggu} menit lagi).\nSilakan mulai main mendekati jadwal reservasi.`);
+      return;
+    }
+    
+    const getDayType = (date) => {
+      const day = new Date(date).getDay();
+      if (day === 0 || day === 6) return "weekend";
+      return "weekday";
+    };
+    
+    const JAM_BUKA = {
+      weekday: { start: 10 * 60, end: 26 * 60 },
+      weekend: { start: 10 * 60, end: 27 * 60 }
+    };
+    
+    const dayType = getDayType(mejaData.tanggal_main);
+    const batasOperasional = JAM_BUKA[dayType];
+    
+    if (waktuSekarangMenit < batasOperasional.start) {
+      alert(`⚠️ Jam operasional dimulai pukul 10:00!\nSaat ini masih pukul ${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}`);
+      return;
+    }
+    
+    if (waktuSekarangMenit >= batasOperasional.end) {
+      const tutupJam = Math.floor(batasOperasional.end / 60);
+      const tutupLabel = tutupJam >= 24 ? `esok hari pukul ${(tutupJam - 24).toString().padStart(2, '0')}:00` : `${tutupJam.toString().padStart(2, '0')}:00`;
+      alert(`⚠️ Jam operasional sudah berakhir pukul ${tutupLabel}!\nSilakan datang kembali besok.`);
+      return;
+    }
+    
+    const jamMulai = `${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}`;
+    
+    try {
+      const { error } = await supabase
+        .from("reservasi_billiard")
+        .update({
+          status_pemesanan: "Playing",
+          jam_mulai: jamMulai
+        })
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      await fetchData();
+      alert(`✅ Meja ${nomorMeja} mulai dimainkan! Waktu mulai: ${jamMulai}`);
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal memulai main: " + error.message);
+    }
+  };
+
+  // ==================== FUNGSI SELESAIKAN MAIN (DIPERBAIKI) ====================
+  const selesaikanMain = async (id, nomorMeja) => {
+    if (window.confirm(`Selesaikan permainan untuk meja ${nomorMeja}?`)) {
+      try {
+        // Ambil data meja
+        const { data: mejaData, error: mejaError } = await supabase
+          .from("reservasi_billiard")
+          .select("*")
+          .eq("id", id)
+          .single();
+        
+        if (mejaError) {
+          console.error("Error fetching meja:", mejaError);
+          alert("Gagal mengambil data meja!");
+          return;
+        }
+        
+        // Hitung total
+        const hargaPerJam = getHargaPerJam(mejaData.nomor_meja);
+        const totalSewa = (mejaData.durasi_bermain || 1) * hargaPerJam;
+        const totalFB = (mejaData.pesanan_fb || []).reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
+        const totalAkhir = totalSewa + totalFB;
+        
+        // Tampilkan struk
+        const strukData = {
+          noStruk: "RC-" + String(mejaData.id).slice(-8),
+          tanggal: new Date().toLocaleString("id-ID"),
+          meja: nomorMeja,
+          pelanggan: mejaData.nama_pelanggan,
+          durasi: mejaData.durasi_bermain || 1,
+          hargaSewa: totalSewa,
+          itemsFB: mejaData.pesanan_fb || [],
+          totalFB: totalFB,
+          diskon: 0,
+          totalAkhir: totalAkhir,
+          metode: "-"
+        };
+        
+        setModalStruk({ isOpen: true, data: strukData });
+        
+        // Update status meja menjadi Selesai
+        const { error: updateError } = await supabase
+          .from("reservasi_billiard")
+          .update({ status_pemesanan: "Selesai" })
+          .eq("id", id);
+        
+        if (updateError) throw updateError;
+        
+        await fetchData();
+        
+      } catch (error) {
+        console.error("Error:", error);
+        alert("Gagal menyelesaikan main: " + error.message);
+      }
     }
   };
 
@@ -210,34 +393,12 @@ export default function KasirDashboard() {
     
     if (window.confirm(`Tambah ${jamTambahan} jam (${jamTambahan} x Rp ${hargaPerJam.toLocaleString("id-ID")} = Rp ${biayaTambahan.toLocaleString("id-ID")})?`)) {
       try {
-        // Update durasi di reservasi
         const { error } = await supabase
           .from("reservasi_billiard")
           .update({ durasi_bermain: durasiBaru })
           .eq("id", id);
         
         if (error) throw error;
-        
-        // Update total_sewa di riwayat_transaksi
-        const { data: riwayatData } = await supabase
-          .from("riwayat_transaksi")
-          .select("*")
-          .eq("id_booking", `RC-${String(id).slice(-8)}`)
-          .single();
-        
-        if (riwayatData) {
-          const newTotalSewa = riwayatData.total_sewa + biayaTambahan;
-          const newTotalAkhir = newTotalSewa + (riwayatData.total_fb || 0);
-          
-          await supabase
-            .from("riwayat_transaksi")
-            .update({ 
-              durasi: durasiBaru,
-              total_sewa: newTotalSewa,
-              total_akhir: newTotalAkhir
-            })
-            .eq("id", riwayatData.id);
-        }
         
         await fetchData();
         alert(`✅ Waktu bermain berhasil ditambah ${jamTambahan} jam! Biaya tambahan: Rp ${biayaTambahan.toLocaleString("id-ID")}`);
@@ -250,6 +411,7 @@ export default function KasirDashboard() {
 
   // Fungsi untuk sewa meja (bayar di muka)
   const sewaMeja = (meja, totalSewa, totalFB, totalTagihan) => {
+    resetDiskon();
     setModalBayar({
       isOpen: true,
       meja: meja,
@@ -259,26 +421,27 @@ export default function KasirDashboard() {
     });
   };
 
-  // Proses pembayaran di muka
+  // Proses pembayaran di muka (dengan diskon)
   const prosesBayarDulu = async (metode) => {
     const { meja, totalSewa, totalFB, totalBiaya } = modalBayar;
     
+    const totalSetelahDiskon = hitungTotalSetelahDiskon(totalBiaya);
+    const nominalDiskon = diskonAktif.aktif ? diskonAktif.nilai : 0;
+    
     try {
-      const jamMulai = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
       const tanggalHariIni = new Date().toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' });
       
-      // Update status meja menjadi Playing dan catat jam mulai
       const { error: updateError } = await supabase
         .from("reservasi_billiard")
         .update({
-          status_pemesanan: "Playing",
-          jam_mulai: jamMulai
+          status_pemesanan: "Sudah Dibayar",
+          jam_mulai: "-",
+          is_food_paid: false
         })
         .eq("id", meja.id);
       
       if (updateError) throw updateError;
       
-      // Simpan ke riwayat transaksi (sudah dibayar)
       const dataStrukBaru = {
         id_booking: "RC-" + String(meja.id).slice(-8),
         nomor_meja: meja.nomor_meja,
@@ -286,10 +449,14 @@ export default function KasirDashboard() {
         durasi: meja.durasi_bermain,
         total_sewa: totalSewa,
         total_fb: totalFB,
-        total_akhir: totalBiaya,
+        total_akhir: totalSetelahDiskon,
+        diskon: nominalDiskon,
+        diskon_keterangan: diskonAktif.aktif ? diskonAktif.keterangan : null,
+        diskon_alasan: diskonAktif.aktif ? diskonAktif.alasan : null,
         metode_pembayaran: metode.toLowerCase(),
-        waktu_selesai: `${tanggalHariIni} ${jamMulai}`,
+        waktu_selesai: `${tanggalHariIni} -`,
         pesanan_fb: meja.pesanan_fb || [],
+        is_food_paid: false,
         created_at: new Date().toISOString()
       };
       
@@ -299,9 +466,15 @@ export default function KasirDashboard() {
       
       if (insertError) throw insertError;
       
+      resetDiskon();
       setModalBayar({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 });
       await fetchData();
-      alert(`✅ Pembayaran berhasil! Meja ${meja.nomor_meja} siap digunakan. Waktu mulai: ${jamMulai}`);
+      
+      if (nominalDiskon > 0) {
+        alert(`✅ Pembayaran berhasil! Diskon ${diskonAktif.keterangan} telah diterapkan.\nTotal bayar: Rp ${totalSetelahDiskon.toLocaleString("id-ID")}`);
+      } else {
+        alert(`✅ Pembayaran berhasil! Meja ${meja.nomor_meja} status "Sudah Dibayar". Klik "Mulai Main" untuk memulai timer.`);
+      }
       
     } catch (error) {
       console.error("Error:", error);
@@ -309,6 +482,30 @@ export default function KasirDashboard() {
     }
   };
 
+  // Fungsi untuk bayar kekurangan
+  const bayarKekurangan = async (id, kekurangan, namaPelanggan, nomorMeja) => {
+    const metode = prompt(`Bayar kekurangan Rp ${kekurangan.toLocaleString("id-ID")}\nPilih metode (Cash / QRIS / Transfer):`, "Cash") || "Cash";
+    
+    if (!metode) return;
+    
+    try {
+      const { error: updateError } = await supabase
+        .from("reservasi_billiard")
+        .update({ is_food_paid: true })
+        .eq("id", id);
+      
+      if (updateError) throw updateError;
+      
+      alert(`✅ Pembayaran kekurangan Rp ${kekurangan.toLocaleString("id-ID")} berhasil via ${metode.toUpperCase()}!\n\nMakanan sudah lunas.`);
+      
+      await fetchData();
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal memproses pembayaran kekurangan: " + error.message);
+    }
+  };
+
+  // ==================== FUNGSI SIMPAN PESANAN KANTIN ====================
   const simpanPesananKantin = async (id, keranjangBaru) => {
     if (!id) {
       alert("ID Meja tidak valid!");
@@ -316,40 +513,35 @@ export default function KasirDashboard() {
     }
     
     try {
-      // Update pesanan di reservasi
+      const { data: mejaData, error: mejaError } = await supabase
+        .from("reservasi_billiard")
+        .select("status_pemesanan")
+        .eq("id", id)
+        .single();
+      
+      if (mejaError) throw mejaError;
+      
+      const isPlaying = mejaData.status_pemesanan === "Playing";
+      
       const { error } = await supabase
         .from("reservasi_billiard")
-        .update({ pesanan_fb: keranjangBaru })
+        .update({ 
+          pesanan_fb: keranjangBaru,
+          is_food_paid: isPlaying ? true : false
+        })
         .eq("id", id);
       
       if (error) throw error;
       
-      // Hitung total tambahan
-      const totalTambahan = keranjangBaru.reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
+      await fetchData();
       
-      // Update juga di riwayat_transaksi
-      const { data: riwayatData } = await supabase
-        .from("riwayat_transaksi")
-        .select("*")
-        .eq("id_booking", `RC-${String(id).slice(-8)}`)
-        .single();
-      
-      if (riwayatData) {
-        const newTotalFB = (riwayatData.total_fb || 0) + totalTambahan;
-        const newTotalAkhir = (riwayatData.total_sewa || 0) + newTotalFB;
-        
-        await supabase
-          .from("riwayat_transaksi")
-          .update({ 
-            total_fb: newTotalFB,
-            total_akhir: newTotalAkhir,
-            pesanan_fb: keranjangBaru
-          })
-          .eq("id", riwayatData.id);
+      if (isPlaying) {
+        alert(`✅ Pesanan berhasil ditambahkan!`);
+      } else {
+        const totalTambahan = keranjangBaru.reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
+        alert(`✅ Pesanan berhasil disimpan! Total makanan: Rp ${totalTambahan.toLocaleString("id-ID")}\nSilakan minta pelanggan bayar kekurangan.`);
       }
       
-      await fetchData();
-      alert("✅ Pesanan berhasil disimpan!");
       return true;
     } catch (error) {
       console.error("Error:", error);
@@ -442,25 +634,116 @@ export default function KasirDashboard() {
     });
   };
 
-  // ==================== FUNGSI TUTUP SHIFT YANG SUDAH DIPERBAIKI ====================
+  // ==================== FUNGSI CETAK CLOSING SHIFT ====================
+  const printClosingReceipt = () => {
+    const reportData = modalClosing.reportData;
+    if (!reportData) return;
+    
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Royal Cue - Laporan Closing Shift</title>
+          <meta charset="UTF-8">
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              font-family: 'Courier New', monospace;
+              margin: 0;
+              padding: 20px;
+              font-size: 12px;
+              background: white;
+            }
+            .receipt {
+              max-width: 300px;
+              margin: 0 auto;
+              background: white;
+              padding: 15px;
+            }
+            .text-center { text-align: center; }
+            .border-top { border-top: 1px dashed #000; margin: 8px 0; }
+            .border-bottom { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .font-bold { font-weight: bold; }
+            .mt-2 { margin-top: 8px; }
+            .pt-2 { padding-top: 8px; }
+            h4 { margin: 0; font-size: 14px; }
+            p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <div class="text-center">
+              <h4>ROYAL CUE BILLIARD</h4>
+              <p>Jl. Jawa No. 10, Banyuwangi</p>
+              <p>Telp: 0812-3456-7890</p>
+              <div class="border-top"></div>
+              <p><strong>LAPORAN TUTUP SHIFT</strong></p>
+              <div class="border-top"></div>
+            </div>
+            <p>WAKTU: ${reportData.waktu}</p>
+            <p>KASIR: ${reportData.nama_kasir}</p>
+            <div class="border-top"></div>
+            <div class="flex"><span>Sewa Meja:</span><span>Rp ${reportData.total_sewa_meja.toLocaleString("id-ID")}</span></div>
+            <div class="flex"><span>Kantin / F&B:</span><span>Rp ${reportData.total_kantin.toLocaleString("id-ID")}</span></div>
+            <div class="flex"><span>Tunai:</span><span>Rp ${reportData.total_tunai.toLocaleString("id-ID")}</span></div>
+            <div class="flex"><span>Non-Tunai:</span><span>Rp ${reportData.total_non_tunai.toLocaleString("id-ID")}</span></div>
+            <div class="border-top"></div>
+            <div class="flex font-bold"><span>TOTAL OMSET:</span><span>Rp ${reportData.grand_total.toLocaleString("id-ID")}</span></div>
+            <div class="border-top"></div>
+            <div class="flex"><span>Total Transaksi:</span><span>${reportData.total_transaksi}</span></div>
+            <div class="border-top"></div>
+            <div class="text-center mt-2">
+              <p>Terima Kasih</p>
+              <p>Royal Cue Studio</p>
+              <p class="mt-2">*** Laporan ini dicetak oleh sistem ***</p>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
+
+  // ==================== FUNGSI TUTUP SHIFT ====================
   const selesaikanClosingDanReset = async () => {
-    if (window.confirm("Konfirmasi tutup shift? Semua meja akan direset ke status Pending.")) {
+    if (window.confirm("Konfirmasi tutup shift?\n\n- Laporan akan disimpan\n- Riwayat transaksi akan dihapus\n- Reservasi yang sudah selesai akan dihapus\n- Meja aktif akan direset ke status Pending")) {
       try {
-        // 1. Simpan laporan ke arsip
-        await supabase.from("arsip_laporan_owner").insert([modalClosing.reportData]);
+        if (modalClosing.reportData) {
+          await supabase.from("arsip_laporan_owner").insert([modalClosing.reportData]);
+        }
         
-        // 2. Hapus semua riwayat transaksi
         await supabase.from("riwayat_transaksi").delete().neq("id", 0);
         
-        // 3. RESET SEMUA MEJA (ubah status menjadi Pending, jam_mulai menjadi '-', reset pesanan)
+        const { error: deleteSelesaiError } = await supabase
+          .from("reservasi_billiard")
+          .delete()
+          .eq("status_pemesanan", "Selesai");
+        
+        if (deleteSelesaiError) throw deleteSelesaiError;
+        
         const { error: resetError } = await supabase
           .from("reservasi_billiard")
           .update({ 
             status_pemesanan: "Pending",
             jam_mulai: "-",
-            pesanan_fb: []
+            pesanan_fb: [],
+            is_food_paid: false
           })
-          .neq("id", 0);
+          .in("status_pemesanan", ["Pending", "Sudah Dibayar", "Playing"]);
         
         if (resetError) throw resetError;
         
@@ -568,11 +851,11 @@ export default function KasirDashboard() {
             />
           </div>
           <div className="flex gap-1 bg-slate-900/90 p-1 rounded-xl">
-            {["Semua", "Pending", "Playing", "Riwayat"].map((tab) => (
+            {["Semua", "Pending", "Sudah Dibayar", "Playing", "Selesai", "Riwayat"].map((tab) => (
               <button 
                 key={tab} 
                 onClick={() => setFilterAktif(tab)} 
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   filterAktif === tab 
                     ? "bg-emerald-500 text-slate-950" 
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
@@ -601,6 +884,7 @@ export default function KasirDashboard() {
                     <th className="p-3">Pelanggan</th>
                     <th className="p-3">Sewa</th>
                     <th className="p-3">Kantin</th>
+                    <th className="p-3">Diskon</th>
                     <th className="p-3">Total</th>
                     <th className="p-3 text-center">Aksi</th>
                   </tr>
@@ -608,7 +892,7 @@ export default function KasirDashboard() {
                 <tbody>
                   {riwayatTerfilter.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="p-8 text-center text-slate-500">Belum ada transaksi</td>
+                      <td colSpan="8" className="p-8 text-center text-slate-500">Belum ada transaksi</td>
                     </tr>
                   ) : (
                     riwayatTerfilter.map((item, idx) => (
@@ -618,6 +902,7 @@ export default function KasirDashboard() {
                         <td className="p-3 font-bold text-white text-sm">{item.nama_pelanggan || "-"}</td>
                         <td className="p-3 text-[10px]">Rp {(item.total_sewa || 0).toLocaleString("id-ID")}</td>
                         <td className="p-3 text-[10px] text-amber-400">Rp {(item.total_fb || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-3 text-[10px] text-green-400">Rp {(item.diskon || 0).toLocaleString("id-ID")}</td>
                         <td className="p-3 font-bold text-emerald-400 text-sm">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
                         <td className="p-3 text-center">
                           <button 
@@ -631,6 +916,7 @@ export default function KasirDashboard() {
                                 hargaSewa: item.total_sewa,
                                 itemsFB: item.pesanan_fb || [],
                                 totalFB: item.total_fb,
+                                diskon: item.diskon || 0,
                                 totalAkhir: item.total_akhir,
                                 metode: item.metode_pembayaran
                               };
@@ -677,7 +963,19 @@ export default function KasirDashboard() {
                     });
                   }}
                   onSewaMeja={sewaMeja}
+                  onMulaiMain={mulaiMain}
+                  onSelesaikanMain={selesaikanMain}
                   onExtendWaktu={extendWaktu}
+                  onBayarKekurangan={bayarKekurangan}
+                  onBukaDiskon={(id, nomorMeja, pelanggan, total) => {
+                    setModalDiskon({
+                      isOpen: true,
+                      mejaId: id,
+                      nomorMeja: nomorMeja,
+                      pelanggan: pelanggan,
+                      totalSebelumDiskon: total
+                    });
+                  }}
                 />
               ))
             )}
@@ -705,29 +1003,42 @@ export default function KasirDashboard() {
                 <FontAwesomeIcon icon={faTimes} size={16} />
               </button>
             </div>
-            <div className="bg-white text-black p-3 font-mono text-[10px] rounded-xl">
-              <div className="text-center border-b pb-1 mb-2">
-                <h4 className="font-bold">ROYAL CUE BILLIARD</h4>
-                <p className="text-[8px]">LAPORAN TUTUP SHIFT</p>
+            
+            <div className="bg-slate-800/50 p-3 rounded-xl mb-3">
+              <div className="text-center mb-2">
+                <p className="text-[10px] text-slate-400">PREVIEW LAPORAN</p>
               </div>
-              <div>WAKTU: {modalClosing.reportData.waktu}</div>
-              <div>KASIR: {modalClosing.reportData.nama_kasir}</div>
-              <div className="border-t my-1"></div>
-              <div className="flex justify-between"><span>Sewa Meja:</span><span>Rp {modalClosing.reportData.total_sewa_meja.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>Kantin:</span><span>Rp {modalClosing.reportData.total_kantin.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>Tunai:</span><span>Rp {modalClosing.reportData.total_tunai.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>Non-Tunai:</span><span>Rp {modalClosing.reportData.total_non_tunai.toLocaleString("id-ID")}</span></div>
-              <div className="border-t my-1 pt-1 font-bold flex justify-between">
-                <span>TOTAL:</span>
-                <span>Rp {modalClosing.reportData.grand_total.toLocaleString("id-ID")}</span>
+              <div className="space-y-1 text-[10px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Sewa Meja:</span>
+                  <span className="text-white">Rp {modalClosing.reportData.total_sewa_meja.toLocaleString("id-ID")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Kantin:</span>
+                  <span className="text-white">Rp {modalClosing.reportData.total_kantin.toLocaleString("id-ID")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Tunai:</span>
+                  <span className="text-white">Rp {modalClosing.reportData.total_tunai.toLocaleString("id-ID")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Non-Tunai:</span>
+                  <span className="text-white">Rp {modalClosing.reportData.total_non_tunai.toLocaleString("id-ID")}</span>
+                </div>
+                <div className="border-t border-slate-700 my-1"></div>
+                <div className="flex justify-between font-bold">
+                  <span className="text-emerald-400">TOTAL:</span>
+                  <span className="text-emerald-400">Rp {modalClosing.reportData.grand_total.toLocaleString("id-ID")}</span>
+                </div>
               </div>
             </div>
+            
             <div className="mt-3 flex flex-col gap-2">
-              <button onClick={() => window.print()} className="py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-xs font-bold cursor-pointer">
-                <FontAwesomeIcon icon={faPrint} size={12} className="mr-1" /> Cetak
+              <button onClick={printClosingReceipt} className="py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-2">
+                <FontAwesomeIcon icon={faPrint} size={12} /> Cetak Struk
               </button>
-              <button onClick={selesaikanClosingDanReset} className="py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold cursor-pointer">
-                <FontAwesomeIcon icon={faCheck} size={12} className="mr-1" /> Selesai & Reset
+              <button onClick={selesaikanClosingDanReset} className="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-2">
+                <FontAwesomeIcon icon={faCheck} size={12} /> Selesai & Reset
               </button>
             </div>
           </div>
@@ -772,6 +1083,12 @@ export default function KasirDashboard() {
                     <span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span>
                   </div>
                 ))}
+                {modalStruk.data.diskon > 0 && (
+                  <div className="flex justify-between text-red-500 mt-1">
+                    <span>Diskon:</span>
+                    <span>- Rp {modalStruk.data.diskon.toLocaleString("id-ID")}</span>
+                  </div>
+                )}
                 <p className="border-t border-dashed border-black/30 my-2"></p>
               </div>
 
@@ -817,6 +1134,16 @@ export default function KasirDashboard() {
         onBayar={prosesBayarDulu}
         meja={modalBayar.meja?.nomor_meja}
         totalBiaya={modalBayar.totalBiaya}
+      />
+
+      {/* MODAL DISKON */}
+      <ModalDiskon
+        isOpen={modalDiskon.isOpen}
+        onClose={() => setModalDiskon({ isOpen: false, mejaId: null, nomorMeja: "", pelanggan: "", totalSebelumDiskon: 0 })}
+        onApplyDiskon={applyDiskon}
+        totalSebelumDiskon={modalDiskon.totalSebelumDiskon}
+        meja={modalDiskon.nomorMeja}
+        pelanggan={modalDiskon.pelanggan}
       />
 
       <style>{`

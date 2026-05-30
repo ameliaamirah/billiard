@@ -1,59 +1,65 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
-  faClock, faCalendarAlt, faUser, faCheck, 
-  faTimes, faSpinner 
+  faCalendarAlt, faSearch, faClock, faEye, faTimes,
+  faChair, faUsers, faSpinner, faChevronLeft, faChevronRight
 } from "@fortawesome/free-solid-svg-icons";
+import { supabase } from "../supabaseClient";
 
 export default function MonitorKasir() {
-  const [pesanan, setPesanan] = useState([]);
-  const [waktuSekarang, setWaktuSekarang] = useState(new Date());
-  const [loading, setLoading] = useState(false);
+  const [reservasi, setReservasi] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tanggalFilter, setTanggalFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedMeja, setSelectedMeja] = useState(null);
+  const [detailMeja, setDetailMeja] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [searchNama, setSearchNama] = useState("");
 
-  const SEMUA_MEJA = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
+  const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
 
-  const getValue = (obj, possibleKeys, defaultValue = "") => {
-    for (let key of possibleKeys) {
-      if (obj[key] !== undefined && obj[key] !== null) return obj[key];
-    }
-    return defaultValue;
+  // Jam operasional (10:00 - 02:00/03:00)
+  const jamOperasional = [
+    "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00",
+    "00:00", "01:00", "02:00", "03:00"
+  ];
+
+  // Konversi jam ke menit
+  const timeToMinutes = (time) => {
+    if (!time || time === "-") return 0;
+    const [hours, minutes] = time.split(":").map(Number);
+    return (hours || 0) * 60 + (minutes || 0);
   };
 
-  const getStatusMeja = (nomorMeja) => {
-    const mejaDipesan = pesanan.find((item) => {
-      const nomorMejaItem = getValue(item, ["nomor_meja", "nomorMeja", "nomorneja"]);
-      const statusItem = getValue(item, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]);
-      return nomorMejaItem === nomorMeja && statusItem === "Disetujui";
-    });
+  // Cek apakah suatu jam termasuk dalam rentang reservasi
+  const isJamTerisi = (jam, reservasiMeja) => {
+    const jamMenit = timeToMinutes(jam);
     
-    if (mejaDipesan) {
-      const durasi = getValue(mejaDipesan, ["durasi_bermain", "durasiBermain", "durakiberman"], 1);
-      const jamMulai = getValue(mejaDipesan, ["jam_mulai", "jamMulai", "jamulai"], "00:00");
-      return { status: "Bermain", durasi, jamMulai };
+    for (const res of reservasiMeja) {
+      const mulaiMenit = timeToMinutes(res.jam_mulai);
+      const selesaiMenit = mulaiMenit + ((res.durasi_bermain || 1) * 60);
+      
+      if (jamMenit >= mulaiMenit && jamMenit < selesaiMenit) {
+        return true;
+      }
     }
-    
-    const mejaPending = pesanan.find((item) => {
-      const nomorMejaItem = getValue(item, ["nomor_meja", "nomorMeja", "nomorneja"]);
-      const statusItem = getValue(item, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]);
-      return nomorMejaItem === nomorMeja && statusItem === "Pending";
-    });
-    
-    if (mejaPending) return { status: "Menunggu", durasi: null, jamMulai: null };
-    return { status: "Tersedia", durasi: null, jamMulai: null };
+    return false;
   };
 
+  // Ambil data reservasi berdasarkan tanggal filter
   const fetchReservasi = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from("reservasi_billiard")
         .select("*")
-        .order("created_at", { ascending: false });
+        .eq("tanggal_main", tanggalFilter)
+        .in("status_pemesanan", ["Pending", "Sudah Dibayar", "Playing", "Disetujui"]);
+      
       if (error) throw error;
-      setPesanan(data || []);
+      setReservasi(data || []);
     } catch (error) {
-      console.error("Error Fetch:", error);
+      console.error("Error fetching reservasi:", error);
+      alert("Gagal memuat data reservasi: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -61,121 +67,379 @@ export default function MonitorKasir() {
 
   useEffect(() => {
     fetchReservasi();
-    const channel = supabase.channel('realtime_reservasi')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservasi_billiard' }, () => fetchReservasi())
-      .subscribe();
-    
-    const interval = setInterval(() => setWaktuSekarang(new Date()), 60000);
-    return () => { supabase.removeChannel(channel); clearInterval(interval); };
-  }, []);
+  }, [tanggalFilter]);
 
-  const ubahStatus = async (id, statusBaru, namaPelanggan, nomorMeja) => {
-    if (statusBaru === "Ditolak") {
-      if (window.confirm(`Hapus pesanan "${namaPelanggan}" untuk ${nomorMeja}?`)) {
-        await supabase.from("reservasi_billiard").delete().eq("id", id);
-        fetchReservasi();
-      }
-    } else if (statusBaru === "Disetujui") {
-      if (window.confirm(`Setujui reservasi untuk "${namaPelanggan}" di ${nomorMeja}?`)) {
-        await supabase.from("reservasi_billiard").update({ status_pemesanan: statusBaru }).eq("id", id);
-        fetchReservasi();
-      }
+  // Group reservasi berdasarkan meja
+  const getReservasiByMeja = (meja) => {
+    return reservasi.filter(r => r.nomor_meja === meja);
+  };
+
+  // Cek status meja secara keseluruhan
+  const getStatusMeja = (meja) => {
+    const reservasiMeja = getReservasiByMeja(meja);
+    if (reservasiMeja.length === 0) return "Kosong";
+    
+    const now = new Date();
+    const nowMenit = now.getHours() * 60 + now.getMinutes();
+    const tanggalSekarang = now.toISOString().split('T')[0];
+    
+    if (tanggalFilter !== tanggalSekarang) {
+      return reservasiMeja.length > 0 ? "Ada Reservasi" : "Kosong";
+    }
+    
+    const isPlaying = reservasiMeja.some(r => {
+      const mulaiMenit = timeToMinutes(r.jam_mulai);
+      const selesaiMenit = mulaiMenit + ((r.durasi_bermain || 1) * 60);
+      return nowMenit >= mulaiMenit && nowMenit < selesaiMenit && r.status_pemesanan === "Playing";
+    });
+    
+    if (isPlaying) return "Sedang Digunakan";
+    if (reservasiMeja.length > 0) return "Ada Reservasi";
+    return "Kosong";
+  };
+
+  // Format tanggal Indonesia
+  const formatTanggal = (tanggal) => {
+    if (!tanggal) return "-";
+    const date = new Date(tanggal);
+    return date.toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  // Handle klik detail meja
+  const handleDetailMeja = (meja) => {
+    const reservasiMeja = getReservasiByMeja(meja);
+    setSelectedMeja(meja);
+    setDetailMeja(reservasiMeja);
+    setShowModal(true);
+  };
+
+  // Filter reservasi berdasarkan nama pelanggan
+  const reservasiFiltered = reservasi.filter(r => 
+    r.nama_pelanggan?.toLowerCase().includes(searchNama.toLowerCase())
+  );
+
+  // Group reservasi untuk tampilan ringkasan
+  const groupedReservasi = reservasiFiltered.reduce((acc, r) => {
+    if (!acc[r.nomor_meja]) acc[r.nomor_meja] = [];
+    acc[r.nomor_meja].push(r);
+    return acc;
+  }, {});
+
+  // Mendapatkan warna status
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "Kosong": return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+      case "Ada Reservasi": return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+      case "Sedang Digunakan": return "bg-red-500/20 text-red-400 border-red-500/30";
+      default: return "bg-slate-700 text-slate-400";
     }
   };
 
-  const getNamaPelanggan = (item) => getValue(item, ["nama_pelanggan", "namaPelanggan", "namepalanggan"], "-");
-  const getNomorMeja = (item) => getValue(item, ["nomor_meja", "nomorMeja", "nomorneja"], "-");
-  const getJamMulai = (item) => getValue(item, ["jam_mulai", "jamMulai", "jamulai"], "-");
-  const getDurasi = (item) => getValue(item, ["durasi_bermain", "durasiBermain", "durakiberman"], 1);
-  const getWaktuSelesai = (jamMulai, durasi) => {
+  // Helper untuk format jam selesai (AMAN dari undefined)
+  const getJamSelesai = (jamMulai, durasi) => {
     if (!jamMulai || jamMulai === "-") return "-";
-    const [hours, minutes] = jamMulai.split(":").map(Number);
-    let endHours = hours + durasi;
-    let daySuffix = "";
-    if (endHours >= 24) { endHours -= 24; daySuffix = " (esok)"; }
-    return `${endHours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}${daySuffix}`;
+    const [h, m] = jamMulai.split(":").map(Number);
+    const endHour = (h || 0) + (durasi || 1);
+    return `${(endHour || 0).toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
   };
 
-  const getMejaTersediaCount = () => SEMUA_MEJA.length - pesanan.filter(i => getValue(i, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]) === "Disetujui").length;
-  const getPendingCount = () => pesanan.filter(i => getValue(i, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]) === "Pending").length;
+  return (
+    <div className="min-h-screen bg-[#020a05] text-white p-4 md:p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-black text-white mb-2">
+          Monitor <span className="text-[#00ff99]">Kasir</span>
+        </h1>
+        <p className="text-slate-400 text-sm">Pantau reservasi meja billiard secara real-time</p>
+      </div>
 
-  const pendingOrders = pesanan.filter(i => getValue(i, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]) === "Pending");
-  const approvedOrders = pesanan.filter(i => getValue(i, ["status_pemesanan", "statusPemesanan", "statuspemesanan"]) === "Disetujui");
-
-  if (loading && pesanan.length === 0) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#020a05] to-[#061010] flex items-center justify-center">
-        <div className="text-center">
-          <FontAwesomeIcon icon={faSpinner} className="animate-spin text-[#00ff99] text-4xl mx-auto mb-4" />
-          <p className="text-slate-400">Memuat data reservasi...</p>
+      {/* Filter Bar */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div className="relative flex-1">
+          <FontAwesomeIcon icon={faCalendarAlt} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="date"
+            value={tanggalFilter}
+            onChange={(e) => setTanggalFilter(e.target.value)}
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-white focus:border-[#00ff99] outline-none transition-all"
+          />
+        </div>
+        <div className="relative flex-1">
+          <FontAwesomeIcon icon={faSearch} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Cari nama pelanggan..."
+            value={searchNama}
+            onChange={(e) => setSearchNama(e.target.value)}
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-white focus:border-[#00ff99] outline-none transition-all"
+          />
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#020a05] to-[#061010] text-white p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800 pb-6">
-          <div>
-            <h1 className="text-2xl font-black text-white">MONITOR <span className="text-[#00ff99]">ROYAL CUE</span></h1>
-            <p className="text-slate-400 text-xs mt-1">Pemantauan Reservasi & Status Meja Real-time</p>
-          </div>
-          <div className="flex gap-3">
-            {[ {label: "Meja Tersedia", val: getMejaTersediaCount(), col: "emerald"}, {label: "Menunggu", val: getPendingCount(), col: "amber"}, {label: "Bermain", val: approvedOrders.length, col: "rose"}].map((s, i) => (
-              <div key={i} className="bg-slate-900/50 rounded-xl px-4 py-2 text-center">
-                <p className="text-[9px] text-slate-400 uppercase">{s.label}</p>
-                <p className={`text-2xl font-black text-${s.col}-400`}>{s.val}</p>
-              </div>
-            ))}
-          </div>
+      {/* Info Tanggal */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 bg-[#00ff99] rounded-full animate-pulse"></div>
+          <p className="text-sm">
+            Menampilkan reservasi untuk tanggal: 
+            <span className="font-bold text-[#00ff99] ml-2">{formatTanggal(tanggalFilter)}</span>
+          </p>
         </div>
+      </div>
 
-        <div>
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">🗂️ STATUS MEJA</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {SEMUA_MEJA.map((meja) => {
-              const { status, durasi, jamMulai } = getStatusMeja(meja);
-              const config = status === "Bermain" ? { c: "text-rose-400", t: "🔴 BERMAIN", b: "bg-rose-900/20 border-rose-500/30" } : status === "Menunggu" ? { c: "text-amber-400", t: "🟡 MENUNGGU", b: "bg-amber-900/20 border-amber-500/30" } : { c: "text-emerald-400", t: "🟢 TERSEDIA", b: "bg-slate-900/40 border-slate-700" };
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-[#00ff99] mb-4" />
+          <p className="text-slate-400">Memuat data reservasi...</p>
+        </div>
+      ) : (
+        <>
+          {/* Grid Meja */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mb-8">
+            {daftarMeja.map((meja) => {
+              const status = getStatusMeja(meja);
+              const statusColor = getStatusColor(status);
+              const reservasiCount = getReservasiByMeja(meja).length;
+              
               return (
-                <div key={meja} className={`p-3 rounded-xl border ${config.b}`}>
-                  <p className="text-slate-400 text-[9px] font-bold uppercase">{meja}</p>
-                  <p className={`font-black text-sm ${config.c}`}>{config.t}</p>
-                  {durasi && status === "Bermain" && <p className="text-[8px] text-slate-500 mt-1">{jamMulai} - {getWaktuSelesai(jamMulai, durasi)}</p>}
+                <div
+                  key={meja}
+                  className={`bg-slate-900/60 border rounded-2xl p-5 transition-all hover:border-[#00ff99]/50 hover:scale-[1.02] ${status === "Sedang Digunakan" ? "border-red-500/50" : "border-slate-800"}`}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-xl font-black">{meja}</h3>
+                      <p className="text-xs text-slate-500">
+                        {reservasiCount} reservasi hari ini
+                      </p>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${statusColor}`}>
+                      {status}
+                    </div>
+                  </div>
+
+                  {/* Ringkasan Reservasi */}
+                  <div className="space-y-2 mb-4 max-h-32 overflow-y-auto">
+                    {getReservasiByMeja(meja).slice(0, 3).map((res, idx) => (
+                      <div key={idx} className="bg-slate-800/30 rounded-lg p-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="font-medium text-slate-300">{res.nama_pelanggan}</span>
+                          <span className="text-[#00ff99] font-mono">
+                            {res.jam_mulai || "-"} - {getJamSelesai(res.jam_mulai, res.durasi_bermain)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-500 mt-0.5">
+                          <span>{res.durasi_bermain || 1} jam</span>
+                          <span className="capitalize">{res.status_pemesanan || "Pending"}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {getReservasiByMeja(meja).length === 0 && (
+                      <p className="text-xs text-slate-500 text-center py-4">Tidak ada reservasi</p>
+                    )}
+                    {getReservasiByMeja(meja).length > 3 && (
+                      <p className="text-[10px] text-slate-500 text-center">
+                        +{getReservasiByMeja(meja).length - 3} reservasi lainnya
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleDetailMeja(meja)}
+                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <FontAwesomeIcon icon={faEye} size={12} />
+                    Lihat Detail Jadwal
+                  </button>
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {/* Tabel Reservasi */}
-        {pendingOrders.length > 0 && (
-          <div className="bg-slate-900/30 border border-slate-800 rounded-2xl overflow-hidden">
-            <div className="p-4 bg-slate-900/50 border-b border-slate-800"><h3 className="text-xs font-bold text-amber-400">⏳ MENUNGGU PERSETUJUAN</h3></div>
+          {/* Ringkasan Semua Reservasi */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-slate-800">
+              <h3 className="font-bold flex items-center gap-2">
+                <FontAwesomeIcon icon={faUsers} className="text-[#00ff99]" />
+                Semua Reservasi ({reservasiFiltered.length})
+              </h3>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-900/80 text-[10px] uppercase text-slate-400">
-                  <tr>{["Pelanggan", "Detail", "Meja", "Durasi", "Aksi"].map(h => <th key={h} className="p-4">{h}</th>)}</tr>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800/50 text-slate-400 text-xs">
+                  <tr>
+                    <th className="p-4">Meja</th>
+                    <th className="p-4">Pelanggan</th>
+                    <th className="p-4">Jam Mulai</th>
+                    <th className="p-4">Selesai</th>
+                    <th className="p-4">Durasi</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">No. WhatsApp</th>
+                  </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {pendingOrders.map((item) => (
-                    <tr key={item.id}>
-                      <td className="p-4 flex items-center gap-2"><FontAwesomeIcon icon={faUser} className="text-slate-500 text-xs" /> <span className="font-bold text-sm">{getNamaPelanggan(item)}</span></td>
-                      <td className="p-4 text-[10px] text-slate-400"><p><FontAwesomeIcon icon={faCalendarAlt} /> {getValue(item, ["tanggal_main", "tanggal"])}</p><p><FontAwesomeIcon icon={faClock} /> {getJamMulai(item)}</p></td>
-                      <td className="p-4 font-black text-emerald-400">{getNomorMeja(item)}</td>
-                      <td className="p-4">{getDurasi(item)} Jam</td>
-                      <td className="p-4 flex gap-2 justify-center">
-                        <button onClick={() => ubahStatus(item.id, "Disetujui", getNamaPelanggan(item), getNomorMeja(item))} className="p-2 bg-emerald-600 rounded-lg"><FontAwesomeIcon icon={faCheck} /></button>
-                        <button onClick={() => ubahStatus(item.id, "Ditolak", getNamaPelanggan(item), getNomorMeja(item))} className="p-2 bg-rose-600 rounded-lg"><FontAwesomeIcon icon={faTimes} /></button>
-                      </td>
+                <tbody>
+                  {reservasiFiltered.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-8 text-center text-slate-500">
+                        Tidak ada reservasi untuk tanggal ini
+                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reservasiFiltered.map((res) => {
+                      let statusColor = "text-yellow-400 bg-yellow-400/10";
+                      if (res.status_pemesanan === "Playing") statusColor = "text-green-400 bg-green-400/10";
+                      if (res.status_pemesanan === "Sudah Dibayar") statusColor = "text-blue-400 bg-blue-400/10";
+                      if (res.status_pemesanan === "Selesai") statusColor = "text-slate-400 bg-slate-400/10";
+                      
+                      return (
+                        <tr key={res.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition-all">
+                          <td className="p-4 font-bold text-[#00ff99]">{res.nomor_meja || "-"}</td>
+                          <td className="p-4">{res.nama_pelanggan || "-"}</td>
+                          <td className="p-4 font-mono">{res.jam_mulai || "-"}</td>
+                          <td className="p-4 font-mono">{getJamSelesai(res.jam_mulai, res.durasi_bermain)}</td>
+                          <td className="p-4">{res.durasi_bermain || 1} jam</td>
+                          <td className="p-4">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${statusColor}`}>
+                              {res.status_pemesanan || "Pending"}
+                            </span>
+                          </td>
+                          <td className="p-4">{res.no_whatsapp || "-"}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* Modal Detail Jadwal Meja */}
+      {showModal && selectedMeja && detailMeja && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-white">📋 Jadwal Reservasi</h3>
+                <p className="text-slate-400 text-sm">{selectedMeja}</p>
+                <p className="text-[#00ff99] text-xs mt-1">{formatTanggal(tanggalFilter)}</p>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-all"
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </div>
+
+            {/* Modal Content - Grid Jam */}
+            <div className="p-5 overflow-y-auto max-h-[60vh]">
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                {jamOperasional.map((jam) => {
+                  const isTerisi = isJamTerisi(jam, detailMeja);
+                  const reservasiJam = detailMeja.find(r => {
+                    const mulaiMenit = timeToMinutes(r.jam_mulai);
+                    const selesaiMenit = mulaiMenit + ((r.durasi_bermain || 1) * 60);
+                    const jamMenit = timeToMinutes(jam);
+                    return jamMenit >= mulaiMenit && jamMenit < selesaiMenit;
+                  });
+                  
+                  let bgColor = "bg-slate-800/50 border-slate-700";
+                  let textColor = "text-slate-400";
+                  let label = jam;
+                  
+                  if (isTerisi) {
+                    bgColor = "bg-red-500/20 border-red-500/50";
+                    textColor = "text-red-400";
+                    label = "PENUH";
+                  } else if (jam === "00:00" || jam === "01:00" || jam === "02:00" || jam === "03:00") {
+                    bgColor = "bg-slate-800/30 border-slate-700/50";
+                    textColor = "text-slate-500";
+                  }
+                  
+                  return (
+                    <div
+                      key={jam}
+                      className={`relative ${bgColor} border rounded-xl p-2 text-center transition-all group`}
+                      title={reservasiJam ? `${reservasiJam.nama_pelanggan} - ${reservasiJam.durasi_bermain || 1} jam` : jam}
+                    >
+                      <div className={`text-[10px] font-bold ${textColor}`}>
+                        {label}
+                      </div>
+                      {reservasiJam && isTerisi && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 bg-slate-800 text-white text-[10px] rounded-lg px-2 py-1 whitespace-nowrap">
+                          {reservasiJam.nama_pelanggan} ({reservasiJam.durasi_bermain || 1} jam)
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Daftar Reservasi */}
+              {detailMeja.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-sm font-bold text-slate-400 mb-3 flex items-center gap-2">
+                    <FontAwesomeIcon icon={faClock} size={12} />
+                    Daftar Reservasi
+                  </h4>
+                  <div className="space-y-2">
+                    {detailMeja.map((res, idx) => (
+                      <div key={idx} className="bg-slate-800/50 rounded-xl p-3 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-white">{res.nama_pelanggan || "-"}</p>
+                          <p className="text-xs text-slate-400">
+                            {res.jam_mulai || "-"} - {getJamSelesai(res.jam_mulai, res.durasi_bermain)} ({res.durasi_bermain || 1} jam)
+                          </p>
+                          {res.no_whatsapp && (
+                            <p className="text-[10px] text-slate-500 mt-1">WA: {res.no_whatsapp}</p>
+                          )}
+                        </div>
+                        <div className={`px-2 py-1 rounded-full text-[9px] font-bold ${
+                          res.status_pemesanan === "Playing" ? "bg-green-500/20 text-green-400" :
+                          res.status_pemesanan === "Sudah Dibayar" ? "bg-blue-500/20 text-blue-400" :
+                          res.status_pemesanan === "Pending" ? "bg-yellow-500/20 text-yellow-400" :
+                          "bg-slate-500/20 text-slate-400"
+                        }`}>
+                          {res.status_pemesanan || "Pending"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-6 py-2.5 bg-[#00ff99] text-black font-bold rounded-xl hover:bg-[#00cc7a] transition-all"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #1e293b;
+          border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #00ff99;
+          border-radius: 10px;
+        }
+      `}</style>
     </div>
   );
 }

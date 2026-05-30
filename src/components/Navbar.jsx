@@ -80,7 +80,7 @@ const Navbar = () => {
 
         {/* MOBILE TOGGLE BUTTON */}
         <button 
-          className="md:hidden text-xl text-white cursor-pointer z-[110] p-1" 
+          className="md:hidden text-x text-white cursor-pointer z-[110] p-1" 
           onClick={() => setMenuOpen(!menuOpen)}
         >
           <FontAwesomeIcon icon={menuOpen ? faTimes : faBars} />

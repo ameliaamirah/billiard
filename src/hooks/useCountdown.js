@@ -29,8 +29,8 @@ export const useCountdown = (endTime) => {
   const seconds = Math.floor((timeLeft / 1000) % 60);
 
   const formatted = !endTime ? "00:00:00" : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const isExpired = timeLeft <= 0;
-  const isExpiring = !isExpired && timeLeft < 1800000;
+  const isExpired = timeLeft <= 0 && endTime !== null;
+  const isExpiring = !isExpired && timeLeft < 1800000 && timeLeft > 0;
 
   return { formatted, isExpired, isExpiring, timeLeft };
 };
