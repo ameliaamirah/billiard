@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+// src/pages/KasirDashboard.jsx
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faSearch, faCoffee, faHistory, faPrint, 
   faTimes, faLock, faUser, faClock, faMoneyBillWave, faCheck,
-  faReceipt, faFileExcel, faFilePdf, faPlus, faPlay, faStop, faTag
+  faReceipt, faFileExcel, faFilePdf, faPlus, faPlay, faStop, faTag,
+  faUsers, faBell
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -14,6 +16,9 @@ import MejaCard from "../components/MejaCard";
 import ModalBayarDulu from "../components/ModalBayarDulu";
 import ModalDiskon from "../features/diskon/ModalDiskon";
 import useDiskon from "../features/diskon/useDiskon";
+import SplitBillModal from "../components/SplitBillModal";
+import NotificationBell from "../components/NotificationBell";
+import { useRealtimeNotification } from "../hooks/useRealtimeNotification";
 import { supabase } from "../supabaseClient";
 
 export default function KasirDashboard() {
@@ -24,6 +29,15 @@ export default function KasirDashboard() {
   const [cariNama, setCariNama] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // State untuk Split Bill
+  const [showSplitBillModal, setShowSplitBillModal] = useState(false);
+  const [splitBillData, setSplitBillData] = useState({
+    total: 0,
+    items: [],
+    meja: "",
+    pelanggan: ""
+  });
+
   const [modalFB, setModalFB] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pesananSaatIni: [] });
   const [modalStruk, setModalStruk] = useState({ isOpen: false, data: null });
   const [modalClosing, setModalClosing] = useState({ isOpen: false, reportData: null });
@@ -31,10 +45,44 @@ export default function KasirDashboard() {
   const [modalDiskon, setModalDiskon] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pelanggan: "", totalSebelumDiskon: 0 });
 
   const { diskonAktif, applyDiskon, resetDiskon, hitungTotalSetelahDiskon } = useDiskon();
+  
+  // Hook notifikasi real-time
+  const { notifyWaktuHampirHabis, notifyWaktuHabis } = useRealtimeNotification();
+  
+  // Ref untuk track notifikasi yang sudah dikirim
+  const notifiedRef = useRef({});
 
   const getHargaPerJam = (nomorMeja) => {
     if (!nomorMeja) return 50000;
     return nomorMeja.toLowerCase().includes("vip") ? 80000 : 50000;
+  };
+
+  // Fungsi untuk menghitung end time
+  const calculateEndTime = (jamMulai, durasiJam) => {
+    if (!jamMulai || jamMulai === "-" || jamMulai === "" || !durasiJam) return null;
+    const [hours, minutes] = jamMulai.split(":").map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return null;
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
+    return startDate.getTime() + (durasiJam * 3600000);
+  };
+
+  // Fungsi untuk membuka modal split bill
+  const openSplitBill = (meja, pelanggan, total, items) => {
+    setSplitBillData({
+      total: total,
+      items: items || [],
+      meja: meja,
+      pelanggan: pelanggan
+    });
+    setShowSplitBillModal(true);
+  };
+
+  // Fungsi proses setelah split bill selesai
+  const handleSplitBillProcessed = async (splitResults, totalTagihan) => {
+    console.log("Split bill processed:", splitResults);
+    alert(`✅ Split bill berhasil!\n${splitResults.length} orang telah membayar.\nTotal: Rp ${totalTagihan.toLocaleString("id-ID")}`);
+    setShowSplitBillModal(false);
   };
 
   const fetchData = async () => {
@@ -94,6 +142,41 @@ export default function KasirDashboard() {
     }
   };
 
+  // Cek waktu setiap menit untuk notifikasi
+  useEffect(() => {
+    const interval = setInterval(() => {
+      daftarMeja.forEach(meja => {
+        if (meja.status_pemesanan === "Playing" && meja.jam_mulai && meja.jam_mulai !== "-") {
+          const endTime = calculateEndTime(meja.jam_mulai, meja.durasi_bermain);
+          if (endTime) {
+            const remaining = endTime - Date.now();
+            const remainingMinutes = Math.floor(remaining / 60000);
+            
+            // Notifikasi 15 menit sebelum habis
+            if (remainingMinutes === 15 && !notifiedRef.current[`${meja.id}_15min`]) {
+              notifyWaktuHampirHabis(meja);
+              notifiedRef.current[`${meja.id}_15min`] = true;
+            }
+            
+            // Notifikasi 5 menit sebelum habis
+            if (remainingMinutes === 5 && !notifiedRef.current[`${meja.id}_5min`]) {
+              notifyWaktuHampirHabis(meja);
+              notifiedRef.current[`${meja.id}_5min`] = true;
+            }
+            
+            // Notifikasi waktu habis
+            if (remaining <= 0 && !notifiedRef.current[`${meja.id}_expired`]) {
+              notifyWaktuHabis(meja);
+              notifiedRef.current[`${meja.id}_expired`] = true;
+            }
+          }
+        }
+      });
+    }, 30000); // Cek setiap 30 detik
+
+    return () => clearInterval(interval);
+  }, [daftarMeja, notifyWaktuHampirHabis, notifyWaktuHabis]);
+
   useEffect(() => {
     fetchData();
     batalkanReservasiKadaluarsa();
@@ -105,6 +188,8 @@ export default function KasirDashboard() {
         () => {
           fetchData();
           batalkanReservasiKadaluarsa();
+          // Reset notified ref saat ada perubahan data
+          notifiedRef.current = {};
         }
       )
       .subscribe();
@@ -319,11 +404,10 @@ export default function KasirDashboard() {
     }
   };
 
-  // ==================== FUNGSI SELESAIKAN MAIN (DIPERBAIKI) ====================
+  // ==================== FUNGSI SELESAIKAN MAIN ====================
   const selesaikanMain = async (id, nomorMeja) => {
     if (window.confirm(`Selesaikan permainan untuk meja ${nomorMeja}?`)) {
       try {
-        // Ambil data meja
         const { data: mejaData, error: mejaError } = await supabase
           .from("reservasi_billiard")
           .select("*")
@@ -336,13 +420,11 @@ export default function KasirDashboard() {
           return;
         }
         
-        // Hitung total
         const hargaPerJam = getHargaPerJam(mejaData.nomor_meja);
         const totalSewa = (mejaData.durasi_bermain || 1) * hargaPerJam;
         const totalFB = (mejaData.pesanan_fb || []).reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
         const totalAkhir = totalSewa + totalFB;
         
-        // Tampilkan struk
         const strukData = {
           noStruk: "RC-" + String(mejaData.id).slice(-8),
           tanggal: new Date().toLocaleString("id-ID"),
@@ -359,7 +441,6 @@ export default function KasirDashboard() {
         
         setModalStruk({ isOpen: true, data: strukData });
         
-        // Update status meja menjadi Selesai
         const { error: updateError } = await supabase
           .from("reservasi_billiard")
           .update({ status_pemesanan: "Selesai" })
@@ -515,18 +596,30 @@ export default function KasirDashboard() {
     try {
       const { data: mejaData, error: mejaError } = await supabase
         .from("reservasi_billiard")
-        .select("status_pemesanan")
+        .select("status_pemesanan, pesanan_fb")
         .eq("id", id)
         .single();
       
       if (mejaError) throw mejaError;
+      
+      const pesananLama = mejaData.pesanan_fb || [];
+      const pesananGabungan = [...pesananLama];
+      
+      keranjangBaru.forEach(itemBaru => {
+        const existingIndex = pesananGabungan.findIndex(p => p.id === itemBaru.id);
+        if (existingIndex >= 0) {
+          pesananGabungan[existingIndex].qty = (pesananGabungan[existingIndex].qty || 0) + (itemBaru.qty || 1);
+        } else {
+          pesananGabungan.push(itemBaru);
+        }
+      });
       
       const isPlaying = mejaData.status_pemesanan === "Playing";
       
       const { error } = await supabase
         .from("reservasi_billiard")
         .update({ 
-          pesanan_fb: keranjangBaru,
+          pesanan_fb: pesananGabungan,
           is_food_paid: isPlaying ? true : false
         })
         .eq("id", id);
@@ -535,10 +628,10 @@ export default function KasirDashboard() {
       
       await fetchData();
       
+      const totalTambahan = keranjangBaru.reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
       if (isPlaying) {
-        alert(`✅ Pesanan berhasil ditambahkan!`);
+        alert(`✅ Pesanan berhasil ditambahkan! Total: Rp ${totalTambahan.toLocaleString("id-ID")}`);
       } else {
-        const totalTambahan = keranjangBaru.reduce((acc, item) => acc + ((item.harga || 0) * (item.qty || 1)), 0);
         alert(`✅ Pesanan berhasil disimpan! Total makanan: Rp ${totalTambahan.toLocaleString("id-ID")}\nSilakan minta pelanggan bayar kekurangan.`);
       }
       
@@ -646,31 +739,14 @@ export default function KasirDashboard() {
           <title>Royal Cue - Laporan Closing Shift</title>
           <meta charset="UTF-8">
           <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            body {
-              font-family: 'Courier New', monospace;
-              margin: 0;
-              padding: 20px;
-              font-size: 12px;
-              background: white;
-            }
-            .receipt {
-              max-width: 300px;
-              margin: 0 auto;
-              background: white;
-              padding: 15px;
-            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Courier New', monospace; margin: 0; padding: 20px; font-size: 12px; background: white; }
+            .receipt { max-width: 300px; margin: 0 auto; background: white; padding: 15px; }
             .text-center { text-align: center; }
             .border-top { border-top: 1px dashed #000; margin: 8px 0; }
-            .border-bottom { border-bottom: 1px dashed #000; margin: 8px 0; }
             .flex { display: flex; justify-content: space-between; }
             .font-bold { font-weight: bold; }
             .mt-2 { margin-top: 8px; }
-            .pt-2 { padding-top: 8px; }
             h4 { margin: 0; font-size: 14px; }
             p { margin: 4px 0; }
           </style>
@@ -689,7 +765,7 @@ export default function KasirDashboard() {
             <p>KASIR: ${reportData.nama_kasir}</p>
             <div class="border-top"></div>
             <div class="flex"><span>Sewa Meja:</span><span>Rp ${reportData.total_sewa_meja.toLocaleString("id-ID")}</span></div>
-            <div class="flex"><span>Kantin / F&B:</span><span>Rp ${reportData.total_kantin.toLocaleString("id-ID")}</span></div>
+            <div class="flex"><span>Kantin:</span><span>Rp ${reportData.total_kantin.toLocaleString("id-ID")}</span></div>
             <div class="flex"><span>Tunai:</span><span>Rp ${reportData.total_tunai.toLocaleString("id-ID")}</span></div>
             <div class="flex"><span>Non-Tunai:</span><span>Rp ${reportData.total_non_tunai.toLocaleString("id-ID")}</span></div>
             <div class="border-top"></div>
@@ -704,10 +780,7 @@ export default function KasirDashboard() {
             </div>
           </div>
           <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            }
+            window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); }
           </script>
         </body>
       </html>
@@ -825,6 +898,9 @@ export default function KasirDashboard() {
             >
               <FontAwesomeIcon icon={faLock} size={14} /> Tutup Shift
             </button>
+
+            {/* Notification Bell */}
+            <NotificationBell />
 
             <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-4 py-2 rounded-xl min-w-[140px]">
               <div className="flex items-center gap-1.5 mb-0.5">
@@ -976,6 +1052,7 @@ export default function KasirDashboard() {
                       totalSebelumDiskon: total
                     });
                   }}
+                  onOpenSplitBill={openSplitBill}
                 />
               ))
             )}
@@ -1049,83 +1126,45 @@ export default function KasirDashboard() {
       {modalStruk.isOpen && modalStruk.data && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 no-print">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-            
             <div className="p-6 text-center border-b border-slate-800">
               <FontAwesomeIcon icon={faReceipt} className="text-[#00ff99] text-3xl mb-3" />
               <h3 className="text-white font-bold uppercase tracking-widest text-sm">Pembayaran Berhasil</h3>
             </div>
-
             <div id="thermal-receipt" className="bg-white p-6 text-black font-mono text-[11px] leading-tight mx-auto my-2 shadow-inner max-w-[280px] rounded-xl">
               <div className="text-center mb-3">
                 <h2 className="font-bold text-sm uppercase">Royal Cue Studio</h2>
                 <p className="text-[9px]">Jl. Jawa No. 10, Banyuwangi</p>
-                <p className="text-[9px]">WA: 0812-3456-7890</p>
                 <p className="border-t border-dashed border-black/30 my-2"></p>
               </div>
-
-              <div className="mb-3 space-y-0.5">
-                <p>No: {modalStruk.data.noStruk}</p>
-                <p>Tgl: {modalStruk.data.tanggal}</p>
-                <p>Meja: {modalStruk.data.meja}</p>
-                <p>Pel: {modalStruk.data.pelanggan}</p>
-                <p>Durasi: {modalStruk.data.durasi} Jam</p>
-                <p className="border-t border-dashed border-black/30 my-2"></p>
-              </div>
-
-              <div className="mb-3">
-                <div className="flex justify-between">
-                  <span>Sewa Meja</span>
-                  <span>Rp {modalStruk.data.hargaSewa?.toLocaleString("id-ID")}</span>
-                </div>
-                {modalStruk.data.itemsFB && modalStruk.data.itemsFB.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-[10px]">
-                    <span>{item.nama} x{item.qty}</span>
-                    <span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span>
-                  </div>
-                ))}
-                {modalStruk.data.diskon > 0 && (
-                  <div className="flex justify-between text-red-500 mt-1">
-                    <span>Diskon:</span>
-                    <span>- Rp {modalStruk.data.diskon.toLocaleString("id-ID")}</span>
-                  </div>
-                )}
-                <p className="border-t border-dashed border-black/30 my-2"></p>
-              </div>
-
-              <div className="text-right space-y-0.5">
-                <div className="flex justify-between font-bold text-sm">
-                  <span>TOTAL</span>
-                  <span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span>
-                </div>
-                <div className="flex justify-between text-[10px]">
-                  <span>METODE</span>
-                  <span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span>
-                </div>
-              </div>
-
-              <div className="text-center mt-4 pt-2 border-t border-dashed border-black/30">
-                <p className="text-[10px] font-bold">TERIMA KASIH</p>
-                <p className="text-[9px]">SELAMAT BERLATIH KEMBALI!</p>
-              </div>
+              <div><p>No: {modalStruk.data.noStruk}</p><p>Tgl: {modalStruk.data.tanggal}</p><p>Meja: {modalStruk.data.meja}</p><p>Pel: {modalStruk.data.pelanggan}</p><p>Durasi: {modalStruk.data.durasi} Jam</p></div>
+              <div className="border-t border-dashed border-black/30 my-2"></div>
+              <div className="flex justify-between"><span>Sewa Meja</span><span>Rp {modalStruk.data.hargaSewa?.toLocaleString("id-ID")}</span></div>
+              {modalStruk.data.itemsFB?.map((item, idx) => (
+                <div key={idx} className="flex justify-between text-[10px]"><span>{item.nama} x{item.qty}</span><span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div>
+              ))}
+              <div className="border-t border-dashed border-black/30 my-2"></div>
+              <div className="flex justify-between font-bold"><span>TOTAL</span><span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span></div>
+              <div className="flex justify-between"><span>METODE</span><span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span></div>
+              <div className="text-center mt-4 pt-2 border-t border-dashed border-black/30"><p>TERIMA KASIH</p><p>SELAMAT BERLATIH KEMBALI!</p></div>
             </div>
-
             <div className="p-6 flex gap-3">
-              <button 
-                onClick={() => setModalStruk({ isOpen: false, data: null })}
-                className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase cursor-pointer hover:bg-slate-700 transition-all"
-              >
-                <FontAwesomeIcon icon={faTimes} size={12} className="mr-1" /> Tutup
-              </button>
-              <button 
-                onClick={handlePrintStruk}
-                className="flex-1 py-3 bg-[#00ff99] text-black font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2 cursor-pointer hover:bg-[#00cc7a] transition-all"
-              >
-                <FontAwesomeIcon icon={faPrint} size={12} /> Cetak Struk
-              </button>
+              <button onClick={() => setModalStruk({ isOpen: false, data: null })} className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase">Tutup</button>
+              <button onClick={handlePrintStruk} className="flex-1 py-3 bg-[#00ff99] text-black font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2">Cetak Struk</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* MODAL SPLIT BILL */}
+      <SplitBillModal
+        isOpen={showSplitBillModal}
+        onClose={() => setShowSplitBillModal(false)}
+        totalTagihan={splitBillData.total}
+        items={splitBillData.items}
+        meja={splitBillData.meja}
+        pelanggan={splitBillData.pelanggan}
+        onProcessSplit={handleSplitBillProcessed}
+      />
 
       {/* MODAL BAYAR DI MUKA */}
       <ModalBayarDulu
@@ -1133,7 +1172,10 @@ export default function KasirDashboard() {
         onClose={() => setModalBayar({ isOpen: false, meja: null, totalBiaya: 0, totalSewa: 0, totalFB: 0 })}
         onBayar={prosesBayarDulu}
         meja={modalBayar.meja?.nomor_meja}
+        pelanggan={modalBayar.meja?.nama_pelanggan}
         totalBiaya={modalBayar.totalBiaya}
+        items={modalBayar.meja?.pesanan_fb || []}
+        onOpenSplitBill={openSplitBill}
       />
 
       {/* MODAL DISKON */}
@@ -1148,33 +1190,13 @@ export default function KasirDashboard() {
 
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          #thermal-receipt, #thermal-receipt * {
-            visibility: visible;
-          }
-          #thermal-receipt {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 10px;
-            box-shadow: none;
-          }
-          @page {
-            margin: 0;
-          }
+          body * { visibility: hidden; }
+          #thermal-receipt, #thermal-receipt * { visibility: visible; }
+          #thermal-receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 10px; box-shadow: none; }
+          @page { margin: 0; }
         }
-        
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .fixed.z-50, .fixed.z-200 {
-          animation: fadeIn 0.2s ease-out forwards;
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .fixed.z-50, .fixed.z-200 { animation: fadeIn 0.2s ease-out forwards; }
       `}</style>
 
     </div>

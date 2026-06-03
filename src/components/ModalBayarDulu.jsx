@@ -1,8 +1,19 @@
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes, faMoneyBillWave, faQrcode, faLandmark } from "@fortawesome/free-solid-svg-icons";
+import { 
+  faTimes, faMoneyBillWave, faQrcode, faLandmark, faUsers 
+} from "@fortawesome/free-solid-svg-icons";
 
-export default function ModalBayarDulu({ isOpen, onClose, onBayar, meja, totalBiaya }) {
+export default function ModalBayarDulu({ 
+  isOpen, 
+  onClose, 
+  onBayar, 
+  meja, 
+  pelanggan,      // ← TAMBAHKAN prop ini
+  totalBiaya,
+  items,          // ← TAMBAHKAN prop ini
+  onOpenSplitBill // ← TAMBAHKAN prop ini
+}) {
   const [metode, setMetode] = useState("Cash");
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +33,7 @@ export default function ModalBayarDulu({ isOpen, onClose, onBayar, meja, totalBi
           <div>
             <h3 className="text-white font-bold text-lg">Pembayaran di Muka</h3>
             <p className="text-slate-400 text-xs">Meja: {meja}</p>
+            {pelanggan && <p className="text-slate-400 text-xs">Pelanggan: {pelanggan}</p>}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
             <FontAwesomeIcon icon={faTimes} size={20} />
@@ -61,13 +73,27 @@ export default function ModalBayarDulu({ isOpen, onClose, onBayar, meja, totalBi
             </div>
           </div>
 
-          <button
-            onClick={handleBayar}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 rounded-xl transition-all"
-          >
-            {loading ? "Memproses..." : `Bayar Rp ${totalBiaya.toLocaleString("id-ID")}`}
-          </button>
+          {/* Dua tombol: Bayar dan Split Bill */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleBayar}
+              disabled={loading}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+            >
+              {loading ? "Memproses..." : `Bayar Rp ${totalBiaya.toLocaleString("id-ID")}`}
+            </button>
+            
+            {/* Tombol Split Bill */}
+            <button
+              onClick={() => {
+                onClose();
+                onOpenSplitBill(meja, pelanggan, totalBiaya, items);
+              }}
+              className="flex-1 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold py-3 flex items-center justify-center gap-2 transition-all"
+            >
+              <FontAwesomeIcon icon={faUsers} /> Split Bill
+            </button>
+          </div>
         </div>
       </div>
     </div>

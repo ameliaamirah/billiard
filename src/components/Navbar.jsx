@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBars, faTimes } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate, useLocation } from "react-router-dom";
+import NotificationBell from "./NotificationBell";
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -9,6 +10,13 @@ const Navbar = () => {
   
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Cek apakah user sudah login (untuk menampilkan notifikasi)
+  const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+  const userRole = localStorage.getItem("role");
+
+  // Notifikasi hanya ditampilkan untuk user yang login (admin atau kasir)
+  const showNotificationBell = isLoggedIn && (userRole === "admin" || userRole === "kasir");
 
   useEffect(() => {
     const lockScroll = () => {
@@ -41,6 +49,15 @@ const Navbar = () => {
     { name: "Beranda", path: "/" },
     { name: "Reservasi Meja", path: "/reservasi" },
   ];
+
+  // Tambahkan link ke dashboard jika user sudah login
+  if (isLoggedIn) {
+    if (userRole === "admin") {
+      navLinks.push({ name: "Dashboard Admin", path: "/admin-dashboard" });
+    } else if (userRole === "kasir") {
+      navLinks.push({ name: "Dashboard Kasir", path: "/kasir-dashboard" });
+    }
+  }
 
   const isNavbarSolid = scrolled || menuOpen || location.pathname !== "/";
 
@@ -76,15 +93,27 @@ const Navbar = () => {
               {item.name}
             </button>
           ))}
+          
+          {/* Notification Bell untuk user yang login */}
+          {showNotificationBell && (
+            <div className="ml-2">
+              <NotificationBell />
+            </div>
+          )}
         </nav>
 
         {/* MOBILE TOGGLE BUTTON */}
-        <button 
-          className="md:hidden text-x text-white cursor-pointer z-[110] p-1" 
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          <FontAwesomeIcon icon={menuOpen ? faTimes : faBars} />
-        </button>
+        <div className="flex items-center gap-3 md:hidden">
+          {/* Notification Bell untuk mobile */}
+          {showNotificationBell && <NotificationBell />}
+          
+          <button 
+            className="text-white cursor-pointer z-[110] p-1" 
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            <FontAwesomeIcon icon={menuOpen ? faTimes : faBars} />
+          </button>
+        </div>
       </div>
 
       {/* BACKGROUND BLUR OVERLAY */}

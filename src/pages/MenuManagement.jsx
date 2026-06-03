@@ -1,22 +1,33 @@
-import React, { useState, useEffect } from "react";
+// src/pages/MenuManagement.jsx
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faPlus, faEdit, faTrash, faSpinner, faTimes, 
   faSave, faSearch, faCheck, faUpload,
-  faUtensils, faCoffee, faBeer, faSmoking, faAppleAlt,
-  faCloudUploadAlt, faImage
+  faUtensils, faCloudUploadAlt, faImage, faSyncAlt,
+  faChevronLeft, faChevronRight
 } from "@fortawesome/free-solid-svg-icons";
-import { supabase } from "../supabaseClient";
+import { menuService } from "../services/menuService";
+import AdminSidebar from "../components/AdminSidebar";
+import AdminNavbar from "../components/AdminNavbar";
 
 export default function MenuManagement() {
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menu, setMenu] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [search, setSearch] = useState("");
   const [filterKategori, setFilterKategori] = useState("Semua");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
   
   const [form, setForm] = useState({
     nama: "",
@@ -25,7 +36,7 @@ export default function MenuManagement() {
     stok: "",
     deskripsi: "",
     is_active: true,
-    gambar_base64: ""
+    gambar_url: ""
   });
 
   const [previewImage, setPreviewImage] = useState(null);
@@ -33,57 +44,40 @@ export default function MenuManagement() {
 
   const kategoriList = ["Semua", "Makanan", "Minuman", "Rokok", "Snack"];
 
-  // Konversi file ke Base64
-  const convertToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  // Ambil data menu dari Supabase
-  const fetchMenu = async () => {
-    setLoading(true);
+  const fetchMenu = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
-      const { data, error } = await supabase
-        .from("menu_fb")
-        .select("*")
-        .order("kategori", { ascending: true })
-        .order("nama", { ascending: true });
-      
-      if (error) throw error;
-      
-      // Format data untuk memastikan gambar_base64 ada
-      const formattedData = (data || []).map(item => ({
-        ...item,
-        gambar_base64: item.gambar_base64 || item.gambar || null
-      }));
-      
-      setMenu(formattedData);
+      const data = await menuService.getAllMenuAdmin(forceRefresh);
+      setMenu(data);
     } catch (error) {
       console.error("Error fetching menu:", error);
       alert("Gagal memuat menu: " + error.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchMenu();
-  }, []);
+  }, [fetchMenu]);
 
-  // Handle file selection
+  const handleRefresh = () => {
+    fetchMenu(true);
+  };
+
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validasi ukuran file (maks 2MB)
       if (file.size > 2 * 1024 * 1024) {
         alert("Ukuran gambar maksimal 2MB!");
         return;
       }
-      // Validasi tipe file
       if (!file.type.startsWith('image/')) {
         alert("File harus berupa gambar!");
         return;
@@ -93,18 +87,24 @@ export default function MenuManagement() {
       setSelectedFile(file);
       setPreviewImage(URL.createObjectURL(file));
       
-      // Konversi ke Base64
-      const base64 = await convertToBase64(file);
-      setForm({ ...form, gambar_base64: base64 });
-      setUploading(false);
+      try {
+        // Upload ke Supabase Storage
+        const imageUrl = await menuService.uploadImage(file);
+        setForm({ ...form, gambar_url: imageUrl });
+      } catch (error) {
+        console.error("Upload error:", error);
+        alert("Gagal upload gambar: " + error.message);
+        setPreviewImage(null);
+        setSelectedFile(null);
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
-  // Simpan menu
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validasi form
     if (!form.nama.trim()) {
       alert("Nama menu harus diisi!");
       return;
@@ -124,32 +124,23 @@ export default function MenuManagement() {
         stok: parseInt(form.stok) || 0,
         deskripsi: form.deskripsi || "",
         is_active: form.is_active,
-        gambar_base64: form.gambar_base64 || null,
-        updated_at: new Date().toISOString()
+        gambar_url: form.gambar_url || null
       };
       
       if (editingItem) {
-        // UPDATE menu
-        const { error } = await supabase
-          .from("menu_fb")
-          .update(dataMenu)
-          .eq("id", editingItem.id);
-        
-        if (error) throw error;
+        // Hapus gambar lama jika diganti
+        if (editingItem.gambar_url && editingItem.gambar_url !== form.gambar_url) {
+          await menuService.deleteImage(editingItem.gambar_url);
+        }
+        await menuService.updateMenu(editingItem.id, dataMenu);
         alert("✅ Menu berhasil diupdate!");
       } else {
-        // INSERT menu baru
-        const { error } = await supabase
-          .from("menu_fb")
-          .insert([{ ...dataMenu, created_at: new Date().toISOString() }]);
-        
-        if (error) throw error;
+        await menuService.addMenu(dataMenu);
         alert("✅ Menu baru berhasil ditambahkan!");
       }
       
       resetForm();
-      await fetchMenu();
-      
+      await fetchMenu(true);
     } catch (error) {
       console.error("Error saving menu:", error);
       alert("Gagal menyimpan menu: " + error.message);
@@ -158,43 +149,31 @@ export default function MenuManagement() {
     }
   };
 
-  // Hapus menu
   const deleteMenu = async (item) => {
     if (window.confirm(`Hapus menu "${item.nama}"?`)) {
       try {
-        const { error } = await supabase
-          .from("menu_fb")
-          .delete()
-          .eq("id", item.id);
-        
-        if (error) throw error;
+        // Hapus gambar dari storage
+        if (item.gambar_url) {
+          await menuService.deleteImage(item.gambar_url);
+        }
+        await menuService.deleteMenu(item.id);
         alert("✅ Menu berhasil dihapus!");
-        await fetchMenu();
+        await fetchMenu(true);
       } catch (error) {
         alert("Gagal menghapus menu: " + error.message);
       }
     }
   };
 
-  // Aktif/Nonaktifkan menu
   const toggleStatus = async (item) => {
     try {
-      const { error } = await supabase
-        .from("menu_fb")
-        .update({ 
-          is_active: !item.is_active, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", item.id);
-      
-      if (error) throw error;
-      await fetchMenu();
+      await menuService.updateMenu(item.id, { is_active: !item.is_active });
+      await fetchMenu(true);
     } catch (error) {
       alert("Gagal mengubah status: " + error.message);
     }
   };
 
-  // Reset form
   const resetForm = () => {
     setForm({
       nama: "",
@@ -203,7 +182,7 @@ export default function MenuManagement() {
       stok: "",
       deskripsi: "",
       is_active: true,
-      gambar_base64: ""
+      gambar_url: ""
     });
     setPreviewImage(null);
     setSelectedFile(null);
@@ -211,7 +190,6 @@ export default function MenuManagement() {
     setModalOpen(false);
   };
 
-  // Edit menu
   const editMenu = (item) => {
     setEditingItem(item);
     setForm({
@@ -221,21 +199,26 @@ export default function MenuManagement() {
       stok: item.stok || "",
       deskripsi: item.deskripsi || "",
       is_active: item.is_active,
-      gambar_base64: item.gambar_base64 || ""
+      gambar_url: item.gambar_url || ""
     });
-    setPreviewImage(item.gambar_base64);
+    setPreviewImage(item.gambar_url);
     setSelectedFile(null);
     setModalOpen(true);
   };
 
-  // Filter menu
+  // Filter dan Pagination
   const filteredMenu = menu.filter(item => {
     const matchKategori = filterKategori === "Semua" || item.kategori === filterKategori;
     const matchSearch = item.nama.toLowerCase().includes(search.toLowerCase());
     return matchKategori && matchSearch;
   });
 
-  // Emoji untuk kategori
+  const totalPages = Math.ceil(filteredMenu.length / itemsPerPage);
+  const paginatedMenu = filteredMenu.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const getKategoriEmoji = (kategori) => {
     switch (kategori) {
       case "Makanan": return "🍽️";
@@ -246,147 +229,212 @@ export default function MenuManagement() {
     }
   };
 
+  // Loading Skeleton
+  const LoadingSkeleton = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      {[...Array(10)].map((_, i) => (
+        <div key={i} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden animate-pulse">
+          <div className="h-32 bg-slate-800/50"></div>
+          <div className="p-4">
+            <div className="h-4 bg-slate-800 rounded w-3/4 mb-2"></div>
+            <div className="h-3 bg-slate-800 rounded w-1/2 mb-3"></div>
+            <div className="flex gap-2">
+              <div className="h-6 bg-slate-800 rounded flex-1"></div>
+              <div className="h-6 bg-slate-800 rounded flex-1"></div>
+              <div className="h-6 bg-slate-800 rounded w-8"></div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#020a05] to-[#061010] text-white p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="flex min-h-screen bg-[#020a05]">
+      <AdminSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      
+      <main className="flex-1 flex flex-col min-h-screen">
+        <AdminNavbar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-black text-white">
-              Manajemen <span className="text-[#00ff99]">Menu F&B</span>
-            </h1>
-            <p className="text-slate-400 text-xs mt-1">Kelola menu makanan, minuman, dan rokok</p>
-          </div>
-          
-          <button
-            onClick={() => setModalOpen(true)}
-            className="bg-[#00aa66] hover:bg-[#00cc7a] px-4 py-2 rounded-xl font-bold text-xs uppercase flex items-center gap-2 cursor-pointer transition-all"
-          >
-            <FontAwesomeIcon icon={faPlus} /> Tambah Menu
-          </button>
-        </div>
-
-        {/* Search & Filter */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <FontAwesomeIcon icon={faSearch} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Cari menu..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-white text-sm focus:outline-none focus:border-[#00ff99]"
-            />
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {kategoriList.map(cat => (
+        <div className="flex-1 p-6 lg:p-8">
+          <div className="mb-8 flex justify-between items-center flex-wrap gap-4">
+            <div>
+              <p className="text-[#00ff99] text-xs font-black uppercase tracking-[4px] mb-2">Manajemen</p>
+              <h1 className="text-3xl lg:text-4xl font-black text-white">Manajemen <span className="text-[#00ff99]">Menu F&B</span></h1>
+              <p className="text-slate-400 text-sm mt-1">Kelola menu makanan, minuman, dan rokok</p>
+            </div>
+            
+            <div className="flex gap-3">
               <button
-                key={cat}
-                onClick={() => setFilterKategori(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  filterKategori === cat 
-                    ? "bg-[#00ff99] text-black" 
-                    : "bg-slate-900/60 text-slate-400 hover:bg-slate-800"
-                }`}
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl font-bold text-xs uppercase flex items-center gap-2 cursor-pointer transition-all"
               >
-                {cat}
+                <FontAwesomeIcon icon={faSyncAlt} spin={refreshing} />
+                Refresh
               </button>
-            ))}
+              <button
+                onClick={() => setModalOpen(true)}
+                className="bg-[#00aa66] hover:bg-[#00cc7a] px-4 py-2 rounded-xl font-bold text-xs uppercase flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <FontAwesomeIcon icon={faPlus} /> Tambah Menu
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* Grid Menu */}
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <FontAwesomeIcon icon={faSpinner} spin className="text-3xl text-[#00ff99]" />
+          {/* Search & Filter */}
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <FontAwesomeIcon icon={faSearch} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Cari menu..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-slate-900/60 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-white text-sm focus:outline-none focus:border-[#00ff99]"
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {kategoriList.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    setFilterKategori(cat);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    filterKategori === cat 
+                      ? "bg-[#00ff99] text-black" 
+                      : "bg-slate-900/60 text-slate-400 hover:bg-slate-800"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filteredMenu.map((item) => (
-              <div key={item.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden hover:border-emerald-500/50 transition-all">
-                {/* Gambar */}
-                <div className="h-32 bg-slate-800/50 relative">
-                  {item.gambar_base64 ? (
-                    <img 
-                      src={item.gambar_base64} 
-                      alt={item.nama} 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error("Gambar error:", item.nama);
-                        e.target.style.display = 'none';
-                        const parent = e.target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-4xl">${getKategoriEmoji(item.kategori)}</div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl">
-                      {getKategoriEmoji(item.kategori)}
-                    </div>
-                  )}
-                  {!item.is_active && (
-                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full">
-                      Nonaktif
-                    </div>
-                  )}
-                </div>
-                
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-bold text-white text-sm">{item.nama}</h3>
-                      <p className="text-[10px] text-slate-500">{item.kategori}</p>
-                    </div>
-                    <p className="text-[#00ff99] font-black text-sm">Rp {item.harga.toLocaleString("id-ID")}</p>
-                  </div>
-                  
-                  {item.stok !== undefined && (
-                    <p className={`text-[10px] ${item.stok < 10 ? "text-red-400" : "text-slate-400"}`}>
-                      Stok: {item.stok}
-                    </p>
-                  )}
-                  
-                  <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => editMenu(item)}
-                      className="flex-1 py-1.5 bg-blue-600/80 hover:bg-blue-500 rounded-lg text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
-                    >
-                      <FontAwesomeIcon icon={faEdit} size={10} /> Edit
-                    </button>
-                    <button
-                      onClick={() => deleteMenu(item)}
-                      className="flex-1 py-1.5 bg-rose-600/80 hover:bg-rose-500 rounded-lg text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
-                    >
-                      <FontAwesomeIcon icon={faTrash} size={10} /> Hapus
-                    </button>
-                    <button
-                      onClick={() => toggleStatus(item)}
-                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                        item.is_active 
-                          ? "bg-emerald-600/80 hover:bg-emerald-500" 
-                          : "bg-slate-700 hover:bg-slate-600"
-                      }`}
-                    >
-                      {item.is_active ? <FontAwesomeIcon icon={faCheck} size={10} /> : "Aktifkan"}
-                    </button>
-                  </div>
-                </div>
+
+          {/* Info Jumlah Menu */}
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-slate-400 text-sm">
+              Menampilkan <span className="text-white font-bold">{paginatedMenu.length}</span> dari{" "}
+              <span className="text-white font-bold">{filteredMenu.length}</span> menu
+            </p>
+            {filteredMenu.length > itemsPerPage && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 bg-slate-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-all"
+                >
+                  <FontAwesomeIcon icon={faChevronLeft} />
+                </button>
+                <span className="px-3 py-1 bg-slate-800 rounded-lg text-white">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 bg-slate-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-all"
+                >
+                  <FontAwesomeIcon icon={faChevronRight} />
+                </button>
               </div>
-            ))}
+            )}
           </div>
-        )}
 
-        {filteredMenu.length === 0 && !loading && (
-          <div className="text-center text-slate-500 py-20">
-            <FontAwesomeIcon icon={faUtensils} className="text-4xl mb-3 opacity-30" />
-            <p>Belum ada menu. Silakan tambah menu baru.</p>
-          </div>
-        )}
-      </div>
+          {/* Grid Menu */}
+          {loading ? (
+            <LoadingSkeleton />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {paginatedMenu.map((item) => (
+                <div key={item.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden hover:border-emerald-500/50 transition-all">
+                  <div className="h-32 bg-slate-800/50 relative">
+                    {item.gambar_url ? (
+                      <img 
+                        src={item.gambar_url} 
+                        alt={item.nama} 
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const parent = e.target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `<div class="w-full h-full flex items-center justify-center text-4xl">${getKategoriEmoji(item.kategori)}</div>`;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl">
+                        {getKategoriEmoji(item.kategori)}
+                      </div>
+                    )}
+                    {!item.is_active && (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full">
+                        Nonaktif
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-bold text-white text-sm">{item.nama}</h3>
+                        <p className="text-[10px] text-slate-500">{item.kategori}</p>
+                      </div>
+                      <p className="text-[#00ff99] font-black text-sm">Rp {item.harga.toLocaleString("id-ID")}</p>
+                    </div>
+                    
+                    {item.stok !== undefined && (
+                      <p className={`text-[10px] ${item.stok < 10 ? "text-red-400" : "text-slate-400"}`}>
+                        Stok: {item.stok}
+                      </p>
+                    )}
+                    
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => editMenu(item)}
+                        className="flex-1 py-1.5 bg-blue-600/80 hover:bg-blue-500 rounded-lg text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      >
+                        <FontAwesomeIcon icon={faEdit} size={10} /> Edit
+                      </button>
+                      <button
+                        onClick={() => deleteMenu(item)}
+                        className="flex-1 py-1.5 bg-rose-600/80 hover:bg-rose-500 rounded-lg text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      >
+                        <FontAwesomeIcon icon={faTrash} size={10} /> Hapus
+                      </button>
+                      <button
+                        onClick={() => toggleStatus(item)}
+                        className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                          item.is_active 
+                            ? "bg-emerald-600/80 hover:bg-emerald-500" 
+                            : "bg-slate-700 hover:bg-slate-600"
+                        }`}
+                      >
+                        {item.is_active ? <FontAwesomeIcon icon={faCheck} size={10} /> : "Aktifkan"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-      {/* Modal Tambah/Edit Menu */}
+          {filteredMenu.length === 0 && !loading && (
+            <div className="text-center text-slate-500 py-20">
+              <FontAwesomeIcon icon={faUtensils} className="text-4xl mb-3 opacity-30" />
+              <p>Belum ada menu. Silakan tambah menu baru.</p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* MODAL TAMBAH/EDIT MENU */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -403,7 +451,6 @@ export default function MenuManagement() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {/* Nama Menu */}
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase">Nama Menu *</label>
                 <input
@@ -416,7 +463,6 @@ export default function MenuManagement() {
                 />
               </div>
 
-              {/* Harga & Stok */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-bold text-slate-400 uppercase">Harga (Rp) *</label>
@@ -441,7 +487,6 @@ export default function MenuManagement() {
                 </div>
               </div>
 
-              {/* Kategori */}
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase">Kategori</label>
                 <select
@@ -456,7 +501,7 @@ export default function MenuManagement() {
                 </select>
               </div>
 
-              {/* Upload Gambar */}
+              {/* Upload Gambar dengan Storage */}
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase">Gambar Menu</label>
                 <div className="mt-2">
@@ -477,21 +522,20 @@ export default function MenuManagement() {
                   </div>
                 </div>
                 
-                {/* Progress Upload */}
                 {uploading && (
                   <div className="mt-3 text-center">
                     <FontAwesomeIcon icon={faSpinner} spin className="text-[#00ff99]" />
-                    <span className="ml-2 text-xs text-slate-400">Memproses gambar...</span>
+                    <span className="ml-2 text-xs text-slate-400">Upload gambar...</span>
                   </div>
                 )}
                 
-                {/* Preview Gambar */}
                 {previewImage && !uploading && (
                   <div className="mt-3 p-2 bg-slate-800 rounded-lg relative">
                     <img 
                       src={previewImage} 
                       alt="Preview" 
                       className="w-24 h-24 object-cover rounded-lg mx-auto"
+                      loading="lazy"
                       onError={(e) => {
                         e.target.src = 'https://placehold.co/200x200?text=Invalid+Image';
                       }}
@@ -501,7 +545,7 @@ export default function MenuManagement() {
                       onClick={() => {
                         setPreviewImage(null);
                         setSelectedFile(null);
-                        setForm({...form, gambar_base64: ""});
+                        setForm({...form, gambar_url: ""});
                       }}
                       className="absolute top-0 right-0 bg-red-500 rounded-full p-1 m-1 hover:bg-red-600 transition-all"
                     >
@@ -512,7 +556,6 @@ export default function MenuManagement() {
                 )}
               </div>
 
-              {/* Deskripsi */}
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase">Deskripsi</label>
                 <textarea
@@ -524,7 +567,6 @@ export default function MenuManagement() {
                 />
               </div>
 
-              {/* Status (hanya untuk edit) */}
               {editingItem && (
                 <div className="flex items-center gap-3">
                   <label className="text-[11px] font-bold text-slate-400 uppercase">Status</label>

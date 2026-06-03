@@ -1,29 +1,64 @@
+// src/pages/LoginAdminPage.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserShield, faSpinner } from "@fortawesome/free-solid-svg-icons";
+import { supabase } from "../supabaseClient";
 
 export default function LoginAdminPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e) => {
+  // src/pages/LoginAdminPage.jsx - bagian yang diubah
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Simulasi autentikasi admin
-    setTimeout(() => {
-      if (username === "admin" && password === "admin123") {
+    setError("");
+
+    try {
+      // HAPUS .single() - gunakan array
+      const { data, error: fetchError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("username", username.trim())
+        .eq("role", "admin");
+
+      if (fetchError) {
+        console.error("Error fetching admin:", fetchError);
+        setError("Terjadi kesalahan koneksi database!");
+        setLoading(false);
+        return;
+      }
+
+      // Cek apakah data ditemukan
+      if (!data || data.length === 0) {
+        setError("Username admin tidak ditemukan!");
+        setLoading(false);
+        return;
+      }
+
+      const user = data[0];
+
+      if (user.password === password) {
         localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("role", "admin");
+        localStorage.setItem("role", user.role);
+        localStorage.setItem("username", user.username);
+        localStorage.setItem("userId", user.id);
+        localStorage.setItem("nama_admin", user.nama_lengkap || user.username);
+        
         navigate("/admin-dashboard");
       } else {
-        alert("Username atau Password Admin salah.");
+        setError("Password salah!");
         setLoading(false);
       }
-    }, 1200);
+    } catch (error) {
+      console.error("Login error:", error);
+      setError("Terjadi kesalahan, silakan coba lagi.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -47,6 +82,13 @@ export default function LoginAdminPage() {
             Panel akses tingkat lanjut untuk manajemen
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
+            {error}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleLogin} className="space-y-6">
@@ -81,7 +123,7 @@ export default function LoginAdminPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-[#00aa66] to-[#00cc7a] hover:from-[#00cc7a] hover:to-[#00ff99] text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-[#00ff99]/20 active:scale-[0.98] cursor-pointer"
+            className="w-full py-4 bg-gradient-to-r from-[#00aa66] to-[#00cc7a] hover:from-[#00cc7a] hover:to-[#00ff99] text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-[#00ff99]/20 active:scale-[0.98] cursor-pointer disabled:opacity-70"
           >
             {loading ? (
               <FontAwesomeIcon icon={faSpinner} className="animate-spin" />

@@ -1,9 +1,11 @@
+// src/pages/LoginPage.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faUser, faLock, faEye, faEyeSlash, faCrown, faSpinner, faArrowRight 
 } from "@fortawesome/free-solid-svg-icons";
+import { supabase } from "../supabaseClient";
 
 export default function LoginPage({ roleLogin }) {
   const navigate = useNavigate();
@@ -13,42 +15,62 @@ export default function LoginPage({ roleLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    setTimeout(() => {
-      // Data user yang valid - tanpa toLowerCase()
-      const validUsers = [
-        { username: "admin", password: "admin123", role: "admin" },
-        { username: "kasir", password: "kasir123", role: "kasir" }
-      ];
+    try {
+      // Tentukan role yang akan dicari berdasarkan props roleLogin
+      let targetRole = "";
+      if (roleLogin === "Admin") targetRole = "admin";
+      else if (roleLogin === "Kasir") targetRole = "kasir";
+      else targetRole = roleLogin?.toLowerCase() || "";
 
-      // LANGSUNG BANDINGKAN tanpa toLowerCase() - gunakan username asli
-      const userFound = validUsers.find(
-        (u) => u.username === username && u.password === password
-      );
+      // Cari user berdasarkan username dan role
+      const { data, error: fetchError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("username", username.trim())
+        .eq("role", targetRole)
+        .single();
 
-      if (userFound) {
-        localStorage.setItem("token", "simulated_frontend_token_xyz123");
-        localStorage.setItem("role", userFound.role);
-        localStorage.setItem("username", userFound.username);
-        localStorage.setItem("isLoggedIn", "true");
-        
+      if (fetchError) {
+        console.error("Error fetching user:", fetchError);
+        setError(`Username atau password ${roleLogin} salah!`);
         setLoading(false);
+        return;
+      }
+
+      // Jika user ditemukan, cek password
+      if (data && data.password === password) {
+        // Login berhasil - simpan data ke localStorage
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("token", "simulated_token_" + Date.now());
+        localStorage.setItem("role", data.role);
+        localStorage.setItem("username", data.username);
+        localStorage.setItem("userId", data.id);
         
-        // Redirect sesuai role
-        if (userFound.role === "admin") {
+        if (data.role === "admin") {
+          localStorage.setItem("nama_admin", data.nama_lengkap || data.username);
           navigate("/admin-dashboard");
-        } else {
+        } else if (data.role === "kasir") {
+          localStorage.setItem("nama_kasir", data.nama_lengkap || data.username);
+          localStorage.setItem("shift", data.shift || "Pagi");
           navigate("/kasir-dashboard");
+        } else {
+          setError("Role tidak dikenali!");
+          setLoading(false);
         }
       } else {
-        setLoading(false);
         setError(`Gagal Login: Username atau password untuk ${roleLogin} tidak sesuai.`);
+        setLoading(false);
       }
-    }, 1000);
+    } catch (error) {
+      console.error("Login error:", error);
+      setError("Terjadi kesalahan, silakan coba lagi.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -116,7 +138,7 @@ export default function LoginPage({ roleLogin }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#00ff99] to-emerald-600 hover:from-[#00dd88] hover:to-emerald-500 text-black font-black text-sm py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-[#00ff99]/10 mt-2"
+              className="w-full bg-gradient-to-r from-[#00ff99] to-emerald-600 hover:from-[#00dd88] hover:to-emerald-500 text-black font-black text-sm py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-[#00ff99]/10 mt-2 disabled:opacity-70"
             >
               {loading ? (
                 <><FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" /> Memproses...</>
@@ -126,17 +148,21 @@ export default function LoginPage({ roleLogin }) {
             </button>
           </form>
 
-          {/* Info Demo Login */}
+          {/* Info Akun dari Database */}
           <div className="mt-8 pt-6 border-t border-slate-800/50">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-3 text-center">Akun Demo</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-3 text-center">Akun dari Database</p>
             <div className="grid grid-cols-1 gap-2">
               <div className="flex justify-between bg-slate-950/30 p-2.5 rounded-lg border border-slate-800/50">
                 <span className="text-[10px] font-bold text-slate-400">Admin</span>
-                <span className="text-[10px] font-mono text-emerald-500">admin / admin123</span>
+                <span className="text-[10px] font-mono text-emerald-500">Boss / boss123</span>
               </div>
               <div className="flex justify-between bg-slate-950/30 p-2.5 rounded-lg border border-slate-800/50">
                 <span className="text-[10px] font-bold text-slate-400">Kasir</span>
-                <span className="text-[10px] font-mono text-blue-500">kasir / kasir123</span>
+                <span className="text-[10px] font-mono text-blue-500">Cantika / Diana123</span>
+              </div>
+              <div className="flex justify-between bg-slate-950/30 p-2.5 rounded-lg border border-slate-800/50">
+                <span className="text-[10px] font-bold text-slate-400">Kasir</span>
+                <span className="text-[10px] font-mono text-blue-500">Budi / Santoso123</span>
               </div>
             </div>
           </div>

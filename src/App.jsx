@@ -3,6 +3,7 @@ import {
   Routes,
   Route,
   useLocation,
+  Navigate,
 } from "react-router-dom";
 
 /* =========================================
@@ -16,12 +17,20 @@ import AdminDashboard from "./pages/AdminDashboard";
 import DashboardUtamaKasir from "./pages/DashboardUtamaKasir";
 import MenuManagement from "./pages/MenuManagement";
 import MonitorKasir from "./pages/MonitorKasir"; 
+import ManageKasir from "./pages/ManageKasir";
+
 /* =========================================
    COMPONENTS
 ========================================= */
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ToastNotification from "./components/ToastNotification";
+
+/* =========================================
+   CONTEXTS
+========================================= */
+import { NotificationProvider } from "./contexts/NotificationContext";
 
 /* =========================================
    LAYOUT CONFIGURATION
@@ -29,37 +38,39 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function LayoutUtama() {
   const location = useLocation();
 
-  const hideNavbar =
-    location.pathname === "/admin" ||
-    location.pathname === "/kasir" ||
-    location.pathname === "/admin-dashboard" ||
-    location.pathname === "/kasir-dashboard" ||
-    location.pathname === "/menu-management" ||
-    location.pathname === "/monitor";  // ✅ TAMBAHKAN
+  // Halaman yang TIDAK menampilkan Navbar
+  const hideNavbarRoutes = [
+    "/admin",
+    "/kasir",
+    "/admin-dashboard",
+    "/kasir-dashboard",
+    "/menu-management",
+    "/monitor",
+    "/manage-kasir",
+  ];
+  const hideNavbar = hideNavbarRoutes.includes(location.pathname);
 
-  const hideFooter =
-    location.pathname === "/" || 
-    location.pathname === "/admin" ||
-    location.pathname === "/kasir" ||
-    location.pathname === "/admin-dashboard" ||
-    location.pathname === "/kasir-dashboard" ||
-    location.pathname === "/menu-management" ||
-    location.pathname === "/monitor";  // ✅ TAMBAHKAN
+  // Halaman yang MENAMPILKAN Footer (Beranda "/" dihapus dari daftar ini)
+  const showFooterRoutes = ["/reservasi"];
+  const showFooter = showFooterRoutes.includes(location.pathname);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
+      {/* Toast Notification untuk popup notifikasi */}
+      <ToastNotification />
+      
       {!hideNavbar && <Navbar />}
       <div className="flex-grow">
         <Routes>
-          {/* PUBLIC */}
+          {/* PUBLIC ROUTES */}
           <Route path="/" element={<HomePage />} />
           <Route path="/reservasi" element={<Reservasi />} />
 
-          {/* LOGIN */}
+          {/* LOGIN ROUTES */}
           <Route path="/admin" element={<LoginAdminPage />} />
           <Route path="/kasir" element={<LoginKasirPage />} />
 
-          {/* ADMIN DASHBOARD */}
+          {/* ADMIN ROUTES */}
           <Route
             path="/admin-dashboard"
             element={
@@ -69,17 +80,6 @@ function LayoutUtama() {
             }
           />
 
-          {/* KASIR DASHBOARD */}
-          <Route
-            path="/kasir-dashboard"
-            element={
-              <ProtectedRoute allowedRole="kasir">
-                <DashboardUtamaKasir />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* MENU MANAGEMENT */}
           <Route
             path="/menu-management"
             element={
@@ -89,7 +89,6 @@ function LayoutUtama() {
             }
           />
 
-          {/* ✅ TAMBAHKAN ROUTE MONITOR KASIR */}
           <Route
             path="/monitor"
             element={
@@ -98,9 +97,36 @@ function LayoutUtama() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="/manage-kasir"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <ManageKasir />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* KASIR ROUTES */}
+          <Route
+            path="/kasir-dashboard"
+            element={
+              <ProtectedRoute allowedRole="kasir">
+                <DashboardUtamaKasir />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 404 NOT FOUND */}
+          <Route 
+            path="*" 
+            element={<Navigate to="/" replace />} 
+          />
         </Routes>
       </div>
-      {!hideFooter && <Footer />}
+      
+      {/* Footer hanya tampil jika berada di route yang ada di showFooterRoutes */}
+      {showFooter && <Footer />}
     </div>
   );
 }
@@ -108,7 +134,9 @@ function LayoutUtama() {
 export default function App() {
   return (
     <Router>
-      <LayoutUtama />
+      <NotificationProvider>
+        <LayoutUtama />
+      </NotificationProvider>
     </Router>
   );
 }

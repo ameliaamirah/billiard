@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -8,6 +9,8 @@ import {
   faPlayCircle, faUserPlus, faBars, faArrowRight
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../supabaseClient";
+import NotificationBell from "../components/NotificationBell";
+import { useRealtimeNotification } from "../hooks/useRealtimeNotification";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -22,9 +25,66 @@ export default function AdminDashboard() {
   });
   const [dataReservasi, setDataReservasi] = useState([]);
   const [error, setError] = useState(null);
+  const [targetOmsetHarian, setTargetOmsetHarian] = useState(1000000); // Target Rp 1.000.000
+  const [isTargetNotified, setIsTargetNotified] = useState(false);
+
+  const { notifyStokMenipis, notifyTargetTercapai } = useRealtimeNotification();
+
+  // Cek stok menu yang menipis
+  const checkStokMenu = async () => {
+    try {
+      const { data: menu, error } = await supabase
+        .from("menu_fb")
+        .select("id, nama, stok, kategori")
+        .lt("stok", 6) // Stok kurang dari 6
+        .gt("stok", 0); // Stok lebih dari 0 (abaikan yang sudah habis)
+
+      if (error) throw error;
+
+      if (menu && menu.length > 0) {
+        menu.forEach(item => {
+          notifyStokMenipis(item);
+        });
+      }
+
+      // Cek stok yang sudah habis
+      const { data: habis, error: habisError } = await supabase
+        .from("menu_fb")
+        .select("id, nama, stok, kategori")
+        .eq("stok", 0);
+
+      if (habisError) throw habisError;
+
+      if (habis && habis.length > 0) {
+        habis.forEach(item => {
+          notifyStokMenipis({ ...item, stok: 0 });
+        });
+      }
+    } catch (error) {
+      console.error("Error checking stok:", error);
+    }
+  };
+
+  // Cek target omset
+  const checkTargetOmset = (omset) => {
+    if (!isTargetNotified && omset >= targetOmsetHarian) {
+      notifyTargetTercapai(targetOmsetHarian, omset);
+      setIsTargetNotified(true);
+    }
+    // Reset notifikasi jika omset turun di bawah target (misalnya awal shift baru)
+    if (omset < targetOmsetHarian) {
+      setIsTargetNotified(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
+    checkStokMenu();
+    
+    // Cek stok setiap 5 menit
+    const stokInterval = setInterval(checkStokMenu, 5 * 60 * 1000);
+    
+    return () => clearInterval(stokInterval);
   }, []);
 
   const fetchData = async () => {
@@ -65,6 +125,9 @@ export default function AdminDashboard() {
       const pendapatanHariIni = riwayat
         .filter(r => new Date(r.created_at) >= todayDate)
         .reduce((sum, r) => sum + (r.total_akhir || 0), 0);
+
+      // Cek target omset
+      checkTargetOmset(pendapatanHariIni);
 
       setStatistik({
         totalReservasi: reservasi.length,
@@ -243,10 +306,15 @@ export default function AdminDashboard() {
             </div>
           </div>
           
-          <div className="flex items-center gap-3 bg-slate-800/50 px-3 py-1.5 rounded-full">
-            <div className="w-2 h-2 bg-[#00ff99] rounded-full animate-pulse" />
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden sm:inline">System Online</span>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider sm:hidden">Online</span>
+          <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <NotificationBell />
+            
+            <div className="flex items-center gap-3 bg-slate-800/50 px-3 py-1.5 rounded-full">
+              <div className="w-2 h-2 bg-[#00ff99] rounded-full animate-pulse" />
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden sm:inline">System Online</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider sm:hidden">Online</span>
+            </div>
           </div>
         </div>
 

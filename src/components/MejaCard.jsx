@@ -2,11 +2,22 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faCoffee, faExchangeAlt, faUser, faClock, faMoneyBillWave, 
   faHourglassHalf, faPlusCircle, faShoppingCart, faPlay, faStop, 
-  faReceipt, faCheckCircle, faCheck, faTag
+  faReceipt, faCheckCircle, faCheck, faTag, faUsers  // ← TAMBAHKAN faUsers
 } from "@fortawesome/free-solid-svg-icons";
 import { useCountdown } from "../hooks/useCountdown";
 
-export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onSewaMeja, onMulaiMain, onSelesaikanMain, onExtendWaktu, onBayarKekurangan, onBukaDiskon }) {
+export default function MejaCard({ 
+  meja, 
+  onPindahMeja, 
+  onOrderMakanan, 
+  onSewaMeja, 
+  onMulaiMain, 
+  onSelesaikanMain, 
+  onExtendWaktu, 
+  onBayarKekurangan, 
+  onBukaDiskon,
+  onOpenSplitBill  // ← TAMBAHKAN prop ini
+}) {
   const statusSekarang = meja.status_pemesanan || "Pending";
   const namaPelanggan = meja.nama_pelanggan || "-";
   const nomorMeja = meja.nomor_meja || "Meja ?";
@@ -247,6 +258,16 @@ export default function MejaCard({ meja, onPindahMeja, onOrderMakanan, onSewaMej
         ) : (
           <button disabled className="w-full bg-slate-800/50 text-slate-600 font-bold py-2.5 rounded-xl text-sm uppercase tracking-wider cursor-not-allowed flex items-center justify-center gap-2">
             <FontAwesomeIcon icon={faCheck} size={14} /> SELESAI
+          </button>
+        )}
+        
+        {/* Tombol Split Bill - TAMPIL UNTUK SEMUA STATUS (kecuali Selesai) */}
+        {statusSekarang !== "Selesai" && (
+          <button
+            onClick={() => onOpenSplitBill(meja.nomor_meja, meja.nama_pelanggan, totalTagihan, meja.pesanan_fb)}
+            className="w-full bg-purple-600/80 hover:bg-purple-500 rounded-lg text-white text-xs font-bold py-2 flex items-center justify-center gap-2 transition-all"
+          >
+            <FontAwesomeIcon icon={faUsers} size={12} /> Split Bill
           </button>
         )}
       </div>
