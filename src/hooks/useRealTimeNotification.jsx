@@ -3,7 +3,7 @@ import { useCallback, useRef } from "react";
 import { useNotification } from "../contexts/NotificationContext";
 
 export const useRealtimeNotification = () => {
-  const { addNotification, NOTIFICATION_TYPES } = useNotification();
+  const { addNotification } = useNotification();
   const lastNotifTime = useRef({});
 
   const canNotify = useCallback((key, interval = 5000) => {
