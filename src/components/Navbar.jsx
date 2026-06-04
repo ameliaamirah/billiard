@@ -11,12 +11,15 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Cek apakah user sudah login (untuk menampilkan notifikasi)
+  // Cek apakah user sudah login
   const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
   const userRole = localStorage.getItem("role");
 
-  // Notifikasi hanya ditampilkan untuk user yang login (admin atau kasir)
-  const showNotificationBell = isLoggedIn && (userRole === "admin" || userRole === "kasir");
+  // Halaman publik (HomePage & Reservasi) - tidak perlu dashboard link & notification bell
+  const isPublicPage = location.pathname === "/" || location.pathname === "/reservasi";
+
+  // Notification bell HANYA tampil jika user login DAN bukan di halaman publik
+  const showNotificationBell = isLoggedIn && !isPublicPage;
 
   useEffect(() => {
     const lockScroll = () => {
@@ -45,19 +48,24 @@ const Navbar = () => {
     navigate(path);
   };
 
-  const navLinks = [
+  // NavLink untuk halaman publik (selalu tampil)
+  const publicNavLinks = [
     { name: "Beranda", path: "/" },
     { name: "Reservasi Meja", path: "/reservasi" },
   ];
 
-  // Tambahkan link ke dashboard jika user sudah login
-  if (isLoggedIn) {
+  // Dashboard link HANYA tampil jika user login DAN bukan di halaman publik
+  const dashboardLinks = [];
+  if (isLoggedIn && !isPublicPage) {
     if (userRole === "admin") {
-      navLinks.push({ name: "Dashboard Admin", path: "/admin-dashboard" });
+      dashboardLinks.push({ name: "Dashboard Admin", path: "/admin-dashboard" });
     } else if (userRole === "kasir") {
-      navLinks.push({ name: "Dashboard Kasir", path: "/kasir-dashboard" });
+      dashboardLinks.push({ name: "Dashboard Kasir", path: "/kasir-dashboard" });
     }
   }
+
+  // Gabungkan link: public links + dashboard links (hanya jika di halaman dashboard)
+  const navLinks = [...publicNavLinks, ...dashboardLinks];
 
   const isNavbarSolid = scrolled || menuOpen || location.pathname !== "/";
 
@@ -94,7 +102,7 @@ const Navbar = () => {
             </button>
           ))}
           
-          {/* Notification Bell untuk user yang login */}
+          {/* Notification Bell - HANYA di halaman dashboard (bukan publik) */}
           {showNotificationBell && (
             <div className="ml-2">
               <NotificationBell />
@@ -104,7 +112,7 @@ const Navbar = () => {
 
         {/* MOBILE TOGGLE BUTTON */}
         <div className="flex items-center gap-3 md:hidden">
-          {/* Notification Bell untuk mobile */}
+          {/* Notification Bell untuk mobile - HANYA di halaman dashboard */}
           {showNotificationBell && <NotificationBell />}
           
           <button 
