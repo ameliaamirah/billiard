@@ -10,7 +10,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../supabaseClient";
 import NotificationBell from "../components/NotificationBell";
-import useRealtimeNotification from "../hooks/useRealtimeNotification";
+import { useRealtimeNotification } from "../hooks/useRealtimeNotification";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
