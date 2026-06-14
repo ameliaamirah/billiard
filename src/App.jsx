@@ -1,3 +1,4 @@
+// src/App.jsx (dengan ScrollToTop)
 import {
   BrowserRouter as Router,
   Routes,
@@ -5,6 +6,7 @@ import {
   useLocation,
   Navigate,
 } from "react-router-dom";
+import { useEffect } from "react";
 
 /* =========================================
    PAGES
@@ -18,6 +20,7 @@ import DashboardUtamaKasir from "./pages/DashboardUtamaKasir";
 import MenuManagement from "./pages/MenuManagement";
 import MonitorKasir from "./pages/MonitorKasir"; 
 import ManageKasir from "./pages/ManageKasir";
+import LaporanShift from "./pages/LaporanShift";
 
 /* =========================================
    COMPONENTS
@@ -31,6 +34,19 @@ import ToastNotification from "./components/ToastNotification";
    CONTEXTS
 ========================================= */
 import { NotificationProvider } from "./contexts/NotificationContext";
+
+/* =========================================
+   SCROLL TO TOP COMPONENT
+========================================= */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  
+  return null;
+}
 
 /* =========================================
    LAYOUT CONFIGURATION
@@ -47,20 +63,24 @@ function LayoutUtama() {
     "/menu-management",
     "/monitor",
     "/manage-kasir",
+    "/laporan-shift",
   ];
+  
+  // ✅ Halaman yang MENAMPILKAN Footer (HAPUS "/" agar footer tidak muncul di beranda)
+  const showFooterRoutes = ["/reservasi"];  // <-- diubah, hanya reservasi yang punya footer
+  
+  // Halaman yang menggunakan layout berbeda (tanpa padding tambahan)
   const hideNavbar = hideNavbarRoutes.includes(location.pathname);
-
-  // Halaman yang MENAMPILKAN Footer (Beranda "/" dihapus dari daftar ini)
-  const showFooterRoutes = ["/reservasi"];
   const showFooter = showFooterRoutes.includes(location.pathname);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
-      {/* Toast Notification untuk popup notifikasi */}
+      <ScrollToTop />
       <ToastNotification />
-      
+
       {!hideNavbar && <Navbar />}
-      <div className="flex-grow">
+      
+      <div className={`flex-grow ${!hideNavbar ? "pt-16" : ""}`}>
         <Routes>
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<HomePage />} />
@@ -79,7 +99,6 @@ function LayoutUtama() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/menu-management"
             element={
@@ -88,7 +107,6 @@ function LayoutUtama() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/monitor"
             element={
@@ -97,12 +115,19 @@ function LayoutUtama() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/manage-kasir"
             element={
               <ProtectedRoute allowedRole="admin">
                 <ManageKasir />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/laporan-shift"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <LaporanShift />
               </ProtectedRoute>
             }
           />
@@ -118,14 +143,10 @@ function LayoutUtama() {
           />
 
           {/* 404 NOT FOUND */}
-          <Route 
-            path="*" 
-            element={<Navigate to="/" replace />} 
-          />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
       
-      {/* Footer hanya tampil jika berada di route yang ada di showFooterRoutes */}
       {showFooter && <Footer />}
     </div>
   );

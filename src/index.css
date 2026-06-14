@@ -1,7 +1,320 @@
+/* src/index.css */
+
+/* Tailwind CSS v4 */
 @import "tailwindcss";
 
 @layer base {
   html {
     scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes progressShrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+@keyframes scrollDot {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+}
+
+/* ==================== ANIMATION CLASSES ==================== */
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fadeInDown {
+  animation: fadeInDown 0.6s ease-out forwards;
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.6s ease-out forwards;
+  animation-delay: 0.2s;
+  opacity: 0;
+  animation-fill-mode: forwards;
+}
+
+.animate-zoomIn {
+  animation: zoomIn 0.2s ease-out forwards;
+}
+
+.animate-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.animate-scrollDot {
+  animation: scrollDot 1.5s ease-in-out infinite;
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.zoom-in {
+  animation: zoomIn 0.2s ease-out;
+}
+
+.slide-in-from-right-5 {
+  animation: slideInFromRight 0.3s ease-out forwards;
+}
+
+.slide-in-from-top-2 {
+  animation: slideInFromTop 0.2s ease-out;
+}
+
+.animate-progress {
+  animation: progressShrink linear forwards;
+}
+
+/* ==================== UTILITY CLASSES ==================== */
+/* Line clamp untuk teks panjang */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(51, 65, 85, 0.5);
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 153, 0.3);
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 153, 0.5);
+}
+
+/* Untuk Firefox */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 153, 0.3) rgba(51, 65, 85, 0.5);
+}
+
+/* Hide scrollbar */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ==================== RESPONSIVE BREAKPOINTS ==================== */
+/* Extra small devices (480px ke atas) */
+@media (min-width: 480px) {
+  .xs\:inline {
+    display: inline;
+  }
+  .xs\:hidden {
+    display: none;
+  }
+  .xs\:block {
+    display: block;
+  }
+  .xs\:flex-row {
+    flex-direction: row;
+  }
+  .xs\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .xs\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .xs\:text-sm {
+    font-size: 0.875rem;
+  }
+  .xs\:text-base {
+    font-size: 1rem;
+  }
+  .xs\:text-4xl {
+    font-size: 2.25rem;
+  }
+  .xs\:w-auto {
+    width: auto;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  /* Sembunyikan elemen yang tidak perlu saat print */
+  body * {
+    visibility: hidden;
+  }
+  
+  #print-content, 
+  #print-content * {
+    visibility: visible;
+  }
+  
+  #print-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 8px;
+  }
+  
+  /* Ukuran kertas untuk thermal printer */
+  @page {
+    size: 58mm auto;
+    margin: 0mm;
+  }
+  
+  /* Hindari page break di tengah konten */
+  #print-content {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  /* Warna hitam putih untuk print */
+  .text-green-700,
+  .text-emerald-400,
+  .text-[#00ff99] {
+    color: black !important;
+  }
+  
+  .text-gray-500, 
+  .text-gray-600,
+  .text-slate-400,
+  .text-slate-500 {
+    color: #666 !important;
+  }
+}
+
+/* ==================== FIX FOR MOBILE BROWSER BAR ==================== */
+@supports (-webkit-touch-callout: none) {
+  .min-h-screen {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* ==================== MODAL ANIMATIONS ==================== */
+.fixed.z-50,
+.fixed.z-200,
+.fixed.z-300 {
+  animation: zoomIn 0.2s ease-out forwards;
+}
+
+/* ==================== ACTIVE STATE FOR TOUCH DEVICES ==================== */
+@media (max-width: 640px) {
+  button:active {
+    transform: scale(0.97);
   }
 }

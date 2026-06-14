@@ -27,10 +27,6 @@ export default function ReservasiPage() {
   });
 
   const daftarMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
-
-  // JAM OPERASIONAL (dalam menit)
-  // Senin - Jumat: 10:00 - 02:00 (26*60 = 1560 menit)
-  // Sabtu - Minggu: 10:00 - 03:00 (27*60 = 1620 menit)
   const JAM_BUKA = {
     weekday: { start: 10 * 60, end: 26 * 60 }, // 10:00 - 02:00
     weekend: { start: 10 * 60, end: 27 * 60 }  // 10:00 - 03:00
@@ -99,7 +95,7 @@ export default function ReservasiPage() {
   // Generate daftar jam yang tersedia berdasarkan tanggal
   const getAvailableHours = (tanggal) => {
     const dayType = getDayType(tanggal);
-    const endHourValue = JAM_BUKA[dayType].end / 60; // 26 atau 27
+    const endHourValue = JAM_BUKA[dayType].end / 60; 
     const availableHours = [];
     
     // Jam 10:00 - 23:00 (siang sampai malam)

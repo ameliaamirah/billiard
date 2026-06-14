@@ -6,7 +6,7 @@ import {
   faSearch, faCoffee, faHistory, faPrint, 
   faTimes, faLock, faUser, faClock, faMoneyBillWave, faCheck,
   faReceipt, faFileExcel, faFilePdf, faPlus, faPlay, faStop, faTag,
-  faUsers, faBell
+  faUsers, faBell, faChartLine, faHome
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -105,8 +105,6 @@ export default function KasirDashboard() {
       setDaftarMeja(reservasi || []);
       setRiwayatTransaksi(riwayat || []);
       
-      console.log("Data loaded - Meja:", reservasi?.length || 0);
-      
     } catch (error) {
       console.error("Error:", error);
       alert("Gagal memuat data: " + error.message);
@@ -152,19 +150,16 @@ export default function KasirDashboard() {
             const remaining = endTime - Date.now();
             const remainingMinutes = Math.floor(remaining / 60000);
             
-            // Notifikasi 15 menit sebelum habis
             if (remainingMinutes === 15 && !notifiedRef.current[`${meja.id}_15min`]) {
               notifyWaktuHampirHabis(meja);
               notifiedRef.current[`${meja.id}_15min`] = true;
             }
             
-            // Notifikasi 5 menit sebelum habis
             if (remainingMinutes === 5 && !notifiedRef.current[`${meja.id}_5min`]) {
               notifyWaktuHampirHabis(meja);
               notifiedRef.current[`${meja.id}_5min`] = true;
             }
             
-            // Notifikasi waktu habis
             if (remaining <= 0 && !notifiedRef.current[`${meja.id}_expired`]) {
               notifyWaktuHabis(meja);
               notifiedRef.current[`${meja.id}_expired`] = true;
@@ -172,7 +167,7 @@ export default function KasirDashboard() {
           }
         }
       });
-    }, 30000); // Cek setiap 30 detik
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [daftarMeja, notifyWaktuHampirHabis, notifyWaktuHabis]);
@@ -188,7 +183,6 @@ export default function KasirDashboard() {
         () => {
           fetchData();
           batalkanReservasiKadaluarsa();
-          // Reset notified ref saat ada perubahan data
           notifiedRef.current = {};
         }
       )
@@ -852,135 +846,160 @@ export default function KasirDashboard() {
   const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + (curr.total_akhir || 0), 0);
 
   if (loading) {
-    return <div className="min-h-screen bg-[#090D1A] flex items-center justify-center text-emerald-400 text-xl">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-[#090D1A] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-emerald-400 text-sm">Loading data...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#090D1A] bg-gradient-to-tr from-[#090D1A] via-[#0E172A] to-[#0F172A] text-slate-100 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-gradient-to-tr from-[#090D1A] via-[#0E172A] to-[#0F172A] text-slate-100 p-3 sm:p-4 md:p-6 lg:p-8 font-sans">
       
-      {/* HEADER */}
-      <div className="no-print mb-8">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800/60 pb-6">
+      {/* ==================== HEADER RESPONSIVE ==================== */}
+      <div className="no-print mb-4 sm:mb-6 md:mb-8">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800/60 pb-3 sm:pb-4 md:pb-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-black text-white">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white">
               Royal Cue <span className="text-emerald-400">Dashboard</span>
             </h1>
-            <p className="text-slate-400 text-xs mt-1">Sistem Billing & Kantin Terpadu (Bayar di Muka)</p>
+            <p className="text-slate-400 text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
+              Sistem Billing & Kantin Terpadu (Bayar di Muka)
+            </p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Tombol Aksi - Responsive Grid */}
+          <div className="grid grid-cols-2 xs:grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={() => navigate("/reservasi")}
-              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-emerald-500/30"
+              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-emerald-500/30 min-h-[36px] sm:min-h-[40px]"
             >
-              <FontAwesomeIcon icon={faPlus} size={14} /> Reservasi Baru
+              <FontAwesomeIcon icon={faPlus} size={10} className="sm:text-xs md:text-sm" />
+              <span className="hidden xs:inline">Reservasi Baru</span>
+              <span className="xs:hidden">Reservasi</span>
             </button>
 
             <button
               onClick={exportToExcel}
-              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all min-h-[36px] sm:min-h-[40px]"
               title="Export ke Excel"
             >
-              <FontAwesomeIcon icon={faFileExcel} size={14} /> Export Excel
+              <FontAwesomeIcon icon={faFileExcel} size={10} className="sm:text-xs md:text-sm" />
+              <span className="hidden xs:inline">Export</span>
             </button>
 
             <button
               onClick={exportToPDF}
-              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all min-h-[36px] sm:min-h-[40px]"
               title="Export ke PDF"
             >
-              <FontAwesomeIcon icon={faFilePdf} size={14} /> Export PDF
+              <FontAwesomeIcon icon={faFilePdf} size={10} className="sm:text-xs md:text-sm" />
+              <span className="hidden xs:inline">PDF</span>
             </button>
 
             <button
               onClick={tanganiClosingShift}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all min-h-[36px] sm:min-h-[40px]"
             >
-              <FontAwesomeIcon icon={faLock} size={14} /> Tutup Shift
+              <FontAwesomeIcon icon={faLock} size={10} className="sm:text-xs md:text-sm" />
+              <span className="hidden xs:inline">Tutup Shift</span>
+              <span className="xs:hidden">Shift</span>
             </button>
 
             {/* Notification Bell */}
-            <NotificationBell />
+            <div className="flex justify-center sm:justify-end">
+              <NotificationBell />
+            </div>
 
-            <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-4 py-2 rounded-xl min-w-[140px]">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <FontAwesomeIcon icon={faMoneyBillWave} className="text-emerald-400 text-[11px]" />
-                <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Omset Shift</p>
+            {/* Omset Card - Responsive */}
+            <div className="col-span-2 xs:col-span-1 bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-xl">
+              <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5">
+                <FontAwesomeIcon icon={faMoneyBillWave} className="text-emerald-400 text-[8px] sm:text-[9px] md:text-[11px]" />
+                <p className="text-[7px] sm:text-[8px] md:text-[9px] text-slate-400 uppercase font-bold tracking-wider">Omset Shift</p>
               </div>
-              <p className="text-base md:text-lg font-black text-emerald-400 text-right">
+              <p className="text-xs sm:text-sm md:text-base lg:text-lg font-black text-emerald-400 text-right">
                 Rp {totalOmsetHariIni.toLocaleString("id-ID")}
               </p>
             </div>
           </div>
         </div>
 
-        {/* TOOLBAR */}
-        <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 p-3 rounded-2xl flex flex-col lg:flex-row gap-3 justify-between items-center mt-6">
-          <div className="relative w-full lg:max-w-md">
-            <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-3 text-slate-500" size={14} />
+        {/* TOOLBAR - Responsive */}
+        <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 p-2 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row gap-2 sm:gap-3 justify-between items-center mt-3 sm:mt-4 md:mt-6">
+          <div className="relative w-full sm:max-w-md">
+            <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={10} />
             <input 
               type="text" 
               placeholder="Cari meja atau pelanggan..." 
               value={cariNama} 
               onChange={(e) => setCariNama(e.target.value)} 
-              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl py-2 pl-9 pr-3 text-white text-sm focus:outline-none focus:border-emerald-500" 
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl py-1.5 sm:py-2 pl-8 sm:pl-9 pr-2 sm:pr-3 text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-500" 
             />
           </div>
-          <div className="flex gap-1 bg-slate-900/90 p-1 rounded-xl">
+          
+          {/* Filter Tabs - Horizontal Scroll untuk HP */}
+          <div className="flex gap-1 bg-slate-900/90 p-1 rounded-xl overflow-x-auto max-w-full sm:max-w-none scrollbar-thin">
             {["Semua", "Pending", "Sudah Dibayar", "Playing", "Selesai", "Riwayat"].map((tab) => (
               <button 
                 key={tab} 
                 onClick={() => setFilterAktif(tab)} 
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 rounded-lg text-[9px] sm:text-[10px] md:text-xs font-bold transition-all cursor-pointer whitespace-nowrap min-h-[28px] sm:min-h-[32px] ${
                   filterAktif === tab 
                     ? "bg-emerald-500 text-slate-950" 
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
                 }`}
               >
-                {tab === "Riwayat" ? <FontAwesomeIcon icon={faHistory} size={12} className="inline mr-1" /> : tab}
+                {tab === "Riwayat" ? <FontAwesomeIcon icon={faHistory} size={8} className="sm:text-[10px] inline mr-1" /> : null}
+                {tab === "Riwayat" ? "History" : tab}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* RENDER KONTEN */}
+      {/* ==================== RENDER KONTEN ==================== */}
       <div className="no-print">
         {filterAktif === "Riwayat" ? (
-          <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl overflow-hidden">
-            <div className="p-3 bg-slate-950/40 border-b border-slate-800 text-xs font-bold text-slate-400">
-              <FontAwesomeIcon icon={faHistory} size={12} className="inline mr-1" /> Laporan Transaksi Selesai ({riwayatTerfilter.length})
+          <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl sm:rounded-2xl overflow-hidden">
+            <div className="p-2 sm:p-3 bg-slate-950/40 border-b border-slate-800 text-[9px] sm:text-xs font-bold text-slate-400">
+              <FontAwesomeIcon icon={faHistory} size={10} className="sm:text-xs inline mr-1" /> 
+              Laporan Transaksi Selesai ({riwayatTerfilter.length})
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950/60 text-[9px] font-bold text-slate-400">
+              <table className="w-full text-left text-[10px] sm:text-xs">
+                <thead className="bg-slate-950/60 text-[8px] sm:text-[9px] font-bold text-slate-400">
                   <tr>
-                    <th className="p-3">Waktu</th>
-                    <th className="p-3">Meja</th>
-                    <th className="p-3">Pelanggan</th>
-                    <th className="p-3">Sewa</th>
-                    <th className="p-3">Kantin</th>
-                    <th className="p-3">Diskon</th>
-                    <th className="p-3">Total</th>
-                    <th className="p-3 text-center">Aksi</th>
+                    <th className="p-2 sm:p-3">Waktu</th>
+                    <th className="p-2 sm:p-3">Meja</th>
+                    <th className="p-2 sm:p-3">Pelanggan</th>
+                    <th className="p-2 sm:p-3">Sewa</th>
+                    <th className="p-2 sm:p-3">Kantin</th>
+                    <th className="p-2 sm:p-3">Diskon</th>
+                    <th className="p-2 sm:p-3">Total</th>
+                    <th className="p-2 sm:p-3 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
                   {riwayatTerfilter.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="p-8 text-center text-slate-500">Belum ada transaksi</td>
+                    <tr key="empty">
+                      <td colSpan="8" className="p-6 sm:p-8 text-center text-slate-500 text-xs">
+                        Belum ada transaksi
+                      </td>
                     </tr>
                   ) : (
                     riwayatTerfilter.map((item, idx) => (
                       <tr key={idx} className="border-t border-slate-800/40">
-                        <td className="p-3 text-[10px]">{item.waktu_selesai}</td>
-                        <td className="p-3 font-bold text-emerald-400 text-sm">{item.nomor_meja || "-"}</td>
-                        <td className="p-3 font-bold text-white text-sm">{item.nama_pelanggan || "-"}</td>
-                        <td className="p-3 text-[10px]">Rp {(item.total_sewa || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-3 text-[10px] text-amber-400">Rp {(item.total_fb || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-3 text-[10px] text-green-400">Rp {(item.diskon || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-3 font-bold text-emerald-400 text-sm">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
-                        <td className="p-3 text-center">
+                        <td className="p-2 sm:p-3 text-[8px] sm:text-[9px]">{item.waktu_selesai}</td>
+                        <td className="p-2 sm:p-3 font-bold text-emerald-400 text-xs sm:text-sm">{item.nomor_meja || "-"}</td>
+                        <td className="p-2 sm:p-3 font-bold text-white text-xs sm:text-sm">{item.nama_pelanggan || "-"}</td>
+                        <td className="p-2 sm:p-3 text-[9px] sm:text-[10px]">Rp {(item.total_sewa || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-2 sm:p-3 text-[9px] sm:text-[10px] text-amber-400">Rp {(item.total_fb || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-2 sm:p-3 text-[9px] sm:text-[10px] text-green-400">Rp {(item.diskon || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-2 sm:p-3 font-bold text-emerald-400 text-xs sm:text-sm">Rp {(item.total_akhir || 0).toLocaleString("id-ID")}</td>
+                        <td className="p-2 sm:p-3 text-center">
                           <button 
                             onClick={() => {
                               const strukData = {
@@ -998,9 +1017,9 @@ export default function KasirDashboard() {
                               };
                               setModalStruk({ isOpen: true, data: strukData });
                             }} 
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-all"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg cursor-pointer transition-all min-w-[32px] min-h-[32px] flex items-center justify-center"
                           >
-                            <FontAwesomeIcon icon={faPrint} size={12} />
+                            <FontAwesomeIcon icon={faPrint} size={10} className="sm:text-xs" />
                           </button>
                         </td>
                       </tr>
@@ -1011,16 +1030,19 @@ export default function KasirDashboard() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
             {mejaTerfilter.length === 0 ? (
-              <div className="col-span-full text-center text-slate-500 py-20">
-                🎱 Tidak ada meja aktif. Silakan buat reservasi terlebih dahulu.
-                <div className="mt-4">
+              <div className="col-span-full text-center text-slate-500 py-16 sm:py-20">
+                <FontAwesomeIcon icon={faHome} className="text-4xl sm:text-5xl mb-3 opacity-30" />
+                <p className="text-sm sm:text-base">Tidak ada meja aktif.</p>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1">Silakan buat reservasi terlebih dahulu.</p>
+                <div className="mt-4 sm:mt-6">
                   <button
                     onClick={() => navigate("/reservasi")}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 mx-auto"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 mx-auto min-h-[40px]"
                   >
-                    <FontAwesomeIcon icon={faPlus} size={14} /> Buat Reservasi Baru
+                    <FontAwesomeIcon icon={faPlus} size={12} className="sm:text-sm" />
+                    Buat Reservasi Baru
                   </button>
                 </div>
               </div>
@@ -1060,6 +1082,8 @@ export default function KasirDashboard() {
         )}
       </div>
 
+      {/* ==================== MODALS ==================== */}
+      
       {/* MODAL F&B */}
       <FandBModal 
         isOpen={modalFB.isOpen} 
@@ -1072,20 +1096,20 @@ export default function KasirDashboard() {
 
       {/* MODAL CLOSING SHIFT */}
       {modalClosing.isOpen && modalClosing.reportData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 no-print">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl max-w-sm w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 no-print">
+          <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl sm:rounded-2xl max-w-sm w-full">
             <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
-              <span className="text-purple-400 font-bold text-xs">X-REPORT CLOSING</span>
-              <button onClick={() => setModalClosing({ isOpen: false, reportData: null })} className="text-slate-400 hover:text-white cursor-pointer">
-                <FontAwesomeIcon icon={faTimes} size={16} />
+              <span className="text-purple-400 font-bold text-xs sm:text-sm">X-REPORT CLOSING</span>
+              <button onClick={() => setModalClosing({ isOpen: false, reportData: null })} className="text-slate-400 hover:text-white cursor-pointer p-1 min-w-[32px] min-h-[32px]">
+                <FontAwesomeIcon icon={faTimes} size={14} />
               </button>
             </div>
             
-            <div className="bg-slate-800/50 p-3 rounded-xl mb-3">
+            <div className="bg-slate-800/50 p-2 sm:p-3 rounded-xl mb-3">
               <div className="text-center mb-2">
-                <p className="text-[10px] text-slate-400">PREVIEW LAPORAN</p>
+                <p className="text-[9px] sm:text-[10px] text-slate-400">PREVIEW LAPORAN</p>
               </div>
-              <div className="space-y-1 text-[10px]">
+              <div className="space-y-1 text-[9px] sm:text-[10px]">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Sewa Meja:</span>
                   <span className="text-white">Rp {modalClosing.reportData.total_sewa_meja.toLocaleString("id-ID")}</span>
@@ -1111,11 +1135,11 @@ export default function KasirDashboard() {
             </div>
             
             <div className="mt-3 flex flex-col gap-2">
-              <button onClick={printClosingReceipt} className="py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-2">
-                <FontAwesomeIcon icon={faPrint} size={12} /> Cetak Struk
+              <button onClick={printClosingReceipt} className="py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl text-[10px] sm:text-xs font-bold cursor-pointer flex items-center justify-center gap-2 min-h-[40px]">
+                <FontAwesomeIcon icon={faPrint} size={10} /> Cetak Struk
               </button>
-              <button onClick={selesaikanClosingDanReset} className="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-2">
-                <FontAwesomeIcon icon={faCheck} size={12} /> Selesai & Reset
+              <button onClick={selesaikanClosingDanReset} className="py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl text-[10px] sm:text-xs font-bold cursor-pointer flex items-center justify-center gap-2 min-h-[40px]">
+                <FontAwesomeIcon icon={faCheck} size={10} /> Selesai & Reset
               </button>
             </div>
           </div>
@@ -1124,32 +1148,53 @@ export default function KasirDashboard() {
 
       {/* MODAL STRUK PEMBAYARAN */}
       {modalStruk.isOpen && modalStruk.data && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 no-print">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-6 text-center border-b border-slate-800">
-              <FontAwesomeIcon icon={faReceipt} className="text-[#00ff99] text-3xl mb-3" />
-              <h3 className="text-white font-bold uppercase tracking-widest text-sm">Pembayaran Berhasil</h3>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4 no-print">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-[95%] sm:max-w-md overflow-hidden shadow-2xl">
+            <div className="p-4 sm:p-6 text-center border-b border-slate-800">
+              <FontAwesomeIcon icon={faReceipt} className="text-[#00ff99] text-2xl sm:text-3xl mb-2 sm:mb-3" />
+              <h3 className="text-white font-bold uppercase tracking-widest text-xs sm:text-sm">Pembayaran Berhasil</h3>
             </div>
-            <div id="thermal-receipt" className="bg-white p-6 text-black font-mono text-[11px] leading-tight mx-auto my-2 shadow-inner max-w-[280px] rounded-xl">
+            <div id="thermal-receipt" className="bg-white p-4 sm:p-6 text-black font-mono text-[10px] sm:text-[11px] leading-tight mx-auto my-2 shadow-inner max-w-[280px] rounded-xl">
               <div className="text-center mb-3">
-                <h2 className="font-bold text-sm uppercase">Royal Cue Studio</h2>
-                <p className="text-[9px]">Jl. Jawa No. 10, Banyuwangi</p>
+                <h2 className="font-bold text-xs sm:text-sm uppercase">Royal Cue Studio</h2>
+                <p className="text-[8px] sm:text-[9px]">Jl. Jawa No. 10, Banyuwangi</p>
                 <p className="border-t border-dashed border-black/30 my-2"></p>
               </div>
-              <div><p>No: {modalStruk.data.noStruk}</p><p>Tgl: {modalStruk.data.tanggal}</p><p>Meja: {modalStruk.data.meja}</p><p>Pel: {modalStruk.data.pelanggan}</p><p>Durasi: {modalStruk.data.durasi} Jam</p></div>
+              <div>
+                <p>No: {modalStruk.data.noStruk}</p>
+                <p>Tgl: {modalStruk.data.tanggal}</p>
+                <p>Meja: {modalStruk.data.meja}</p>
+                <p>Pel: {modalStruk.data.pelanggan}</p>
+                <p>Durasi: {modalStruk.data.durasi} Jam</p>
+              </div>
               <div className="border-t border-dashed border-black/30 my-2"></div>
               <div className="flex justify-between"><span>Sewa Meja</span><span>Rp {modalStruk.data.hargaSewa?.toLocaleString("id-ID")}</span></div>
-              {modalStruk.data.itemsFB?.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-[10px]"><span>{item.nama} x{item.qty}</span><span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span></div>
+              {modalStruk.data.itemsFB?.slice(0, 3).map((item, idx) => (
+                <div key={idx} className="flex justify-between text-[9px] sm:text-[10px]">
+                  <span>{item.nama} x{item.qty}</span>
+                  <span>Rp {((item.harga || 0) * (item.qty || 1)).toLocaleString("id-ID")}</span>
+                </div>
               ))}
+              {modalStruk.data.itemsFB?.length > 3 && (
+                <p className="text-[8px] text-slate-400 text-center">+{modalStruk.data.itemsFB.length - 3} item lainnya</p>
+              )}
               <div className="border-t border-dashed border-black/30 my-2"></div>
-              <div className="flex justify-between font-bold"><span>TOTAL</span><span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span></div>
-              <div className="flex justify-between"><span>METODE</span><span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span></div>
-              <div className="text-center mt-4 pt-2 border-t border-dashed border-black/30"><p>TERIMA KASIH</p><p>SELAMAT BERLATIH KEMBALI!</p></div>
+              <div className="flex justify-between font-bold text-[10px] sm:text-[11px]">
+                <span>TOTAL</span>
+                <span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span>
+              </div>
+              <div className="flex justify-between text-[9px] sm:text-[10px]">
+                <span>METODE</span>
+                <span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span>
+              </div>
+              <div className="text-center mt-3 pt-2 border-t border-dashed border-black/30">
+                <p className="text-[9px] sm:text-[10px]">TERIMA KASIH</p>
+                <p className="text-[8px] sm:text-[9px]">SELAMAT BERLATIH KEMBALI!</p>
+              </div>
             </div>
-            <div className="p-6 flex gap-3">
-              <button onClick={() => setModalStruk({ isOpen: false, data: null })} className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase">Tutup</button>
-              <button onClick={handlePrintStruk} className="flex-1 py-3 bg-[#00ff99] text-black font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2">Cetak Struk</button>
+            <div className="p-4 sm:p-6 flex gap-3">
+              <button onClick={() => setModalStruk({ isOpen: false, data: null })} className="flex-1 py-2 sm:py-3 bg-slate-800 text-white rounded-xl font-bold text-[10px] sm:text-xs uppercase min-h-[40px]">Tutup</button>
+              <button onClick={handlePrintStruk} className="flex-1 py-2 sm:py-3 bg-[#00ff99] text-black font-black rounded-xl text-[10px] sm:text-xs uppercase flex items-center justify-center gap-2 min-h-[40px]">Cetak Struk</button>
             </div>
           </div>
         </div>
@@ -1197,6 +1242,9 @@ export default function KasirDashboard() {
         }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .fixed.z-50, .fixed.z-200 { animation: fadeIn 0.2s ease-out forwards; }
+        .scrollbar-thin::-webkit-scrollbar { height: 3px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: rgba(51, 65, 85, 0.5); border-radius: 10px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0, 255, 153, 0.3); border-radius: 10px; }
       `}</style>
 
     </div>

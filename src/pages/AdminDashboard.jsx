@@ -4,12 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faCrown, faUsers, faClock, faCheckCircle, faTimesCircle, 
-  faSignOutAlt, faCalendarAlt, faChartLine, faMoneyBillWave,
+  faCalendarAlt, faChartLine, faMoneyBillWave,
   faClipboardList, faUtensils, faSpinner, faHourglassHalf,
-  faPlayCircle, faUserPlus, faBars, faArrowRight
+  faPlayCircle, faUserPlus, faArrowRight
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../supabaseClient";
-import NotificationBell from "../components/NotificationBell";
+import AdminSidebar from "../components/AdminSidebar";
+import AdminNavbar from "../components/AdminNavbar";
 import { useRealtimeNotification } from "../hooks/useRealtimeNotification";
 
 export default function AdminDashboard() {
@@ -25,19 +26,18 @@ export default function AdminDashboard() {
   });
   const [dataReservasi, setDataReservasi] = useState([]);
   const [error, setError] = useState(null);
-  const [targetOmsetHarian, setTargetOmsetHarian] = useState(1000000); // Target Rp 1.000.000
+  const [targetOmsetHarian, setTargetOmsetHarian] = useState(1000000);
   const [isTargetNotified, setIsTargetNotified] = useState(false);
 
   const { notifyStokMenipis, notifyTargetTercapai } = useRealtimeNotification();
 
-  // Cek stok menu yang menipis
   const checkStokMenu = async () => {
     try {
       const { data: menu, error } = await supabase
         .from("menu_fb")
         .select("id, nama, stok, kategori")
-        .lt("stok", 6) // Stok kurang dari 6
-        .gt("stok", 0); // Stok lebih dari 0 (abaikan yang sudah habis)
+        .lt("stok", 6)
+        .gt("stok", 0);
 
       if (error) throw error;
 
@@ -47,7 +47,6 @@ export default function AdminDashboard() {
         });
       }
 
-      // Cek stok yang sudah habis
       const { data: habis, error: habisError } = await supabase
         .from("menu_fb")
         .select("id, nama, stok, kategori")
@@ -65,13 +64,11 @@ export default function AdminDashboard() {
     }
   };
 
-  // Cek target omset
   const checkTargetOmset = (omset) => {
     if (!isTargetNotified && omset >= targetOmsetHarian) {
       notifyTargetTercapai(targetOmsetHarian, omset);
       setIsTargetNotified(true);
     }
-    // Reset notifikasi jika omset turun di bawah target (misalnya awal shift baru)
     if (omset < targetOmsetHarian) {
       setIsTargetNotified(false);
     }
@@ -80,10 +77,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchData();
     checkStokMenu();
-    
-    // Cek stok setiap 5 menit
     const stokInterval = setInterval(checkStokMenu, 5 * 60 * 1000);
-    
     return () => clearInterval(stokInterval);
   }, []);
 
@@ -126,7 +120,6 @@ export default function AdminDashboard() {
         .filter(r => new Date(r.created_at) >= todayDate)
         .reduce((sum, r) => sum + (r.total_akhir || 0), 0);
 
-      // Cek target omset
       checkTargetOmset(pendapatanHariIni);
 
       setStatistik({
@@ -156,18 +149,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("username");
-    localStorage.removeItem("currentUser");
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("nama_kasir");
-    localStorage.removeItem("shift");
-    localStorage.removeItem("userId");
-    window.location.href = "/admin";
-  };
-
   const getStatusBadge = (status) => {
     switch (status) {
       case "Disetujui":
@@ -185,13 +166,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const menuItems = [
-    { label: "Dashboard", icon: faChartLine, path: "/admin-dashboard", active: true },
-    { label: "Monitor Kasir", icon: faClock, path: "/monitor" },
-    { label: "Manajemen Menu", icon: faUtensils, path: "/menu-management" },
-    { label: "Kelola Kasir", icon: faUserPlus, path: "/manage-kasir" },
-  ];
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#020a05] flex items-center justify-center">
@@ -203,13 +177,13 @@ export default function AdminDashboard() {
   if (error) {
     return (
       <div className="min-h-screen bg-[#020a05] flex flex-col items-center justify-center p-4">
-        <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-6 max-w-md text-center">
-          <FontAwesomeIcon icon={faTimesCircle} className="text-4xl text-red-400 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Error Memuat Data</h2>
-          <p className="text-slate-400 text-sm mb-4">{error}</p>
+        <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-4 sm:p-6 max-w-md text-center">
+          <FontAwesomeIcon icon={faTimesCircle} className="text-3xl sm:text-4xl text-red-400 mb-4" />
+          <h2 className="text-lg sm:text-xl font-bold text-white mb-2">Error Memuat Data</h2>
+          <p className="text-slate-400 text-xs sm:text-sm mb-4">{error}</p>
           <button 
             onClick={() => fetchData()} 
-            className="px-4 py-2 bg-[#00aa66] hover:bg-[#00cc7a] rounded-xl text-white text-sm font-bold"
+            className="px-4 py-2.5 sm:py-2 bg-[#00aa66] hover:bg-[#00cc7a] rounded-xl text-white text-xs sm:text-sm font-bold min-h-[44px]"
           >
             Coba Lagi
           </button>
@@ -220,204 +194,150 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-[#020a05]">
-      {/* SIDEBAR - Desktop selalu terbuka, mobile bisa di-toggle */}
-      {/* Mobile sidebar backdrop */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <AdminSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-72 bg-slate-950 border-r border-slate-800
-        flex flex-col transition-transform duration-300 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Sidebar Header */}
-        <div className="flex items-center gap-3 border-b border-slate-800 p-5">
-          <div className="w-10 h-10 rounded-xl bg-[#00ff99]/10 border border-[#00ff99]/20 flex items-center justify-center">
-            <FontAwesomeIcon icon={faCrown} className="text-[#00ff99] text-lg" />
-          </div>
-          <div>
-            <h2 className="font-black text-white text-lg">Royal Cue</h2>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Admin System</p>
-          </div>
-        </div>
-
-        {/* Menu Items */}
-        <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => {
-                navigate(item.path);
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all cursor-pointer ${
-                item.active 
-                  ? "bg-[#00ff99]/10 text-[#00ff99] border border-[#00ff99]/20" 
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              <FontAwesomeIcon icon={item.icon} className="text-base" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Divider */}
-        <div className="border-t border-slate-800 mx-4 my-2"></div>
-
-        {/* Logout Button */}
-        <div className="p-4">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 py-3 rounded-xl font-medium transition-all cursor-pointer"
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} />
-            Logout
-          </button>
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col min-h-screen">
-        {/* Navbar */}
-        <div className="sticky top-0 z-30 flex h-16 w-full items-center justify-between bg-[#0b0e14] border-b border-slate-800 px-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            {/* Sidebar toggle button (mobile only) */}
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden text-white p-2 hover:bg-slate-800 rounded-lg transition-all"
-            >
-              <FontAwesomeIcon icon={faBars} size={20} />
-            </button>
-            
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-[#00ff99] to-emerald-700 rounded-lg flex items-center justify-center">
-                <FontAwesomeIcon icon={faCrown} className="text-white text-sm" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="font-black text-white text-sm">Royal Cue</h1>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Admin Panel</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Notification Bell */}
-            <NotificationBell />
-            
-            <div className="flex items-center gap-3 bg-slate-800/50 px-3 py-1.5 rounded-full">
-              <div className="w-2 h-2 bg-[#00ff99] rounded-full animate-pulse" />
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden sm:inline">System Online</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider sm:hidden">Online</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Page Content */}
-        <div className="flex-1 p-6 lg:p-8">
-          <div className="mb-8">
-            <p className="text-[#00ff99] text-xs font-black uppercase tracking-[4px] mb-2">Overview</p>
-            <h1 className="text-3xl lg:text-4xl font-black text-white">Dashboard <span className="text-[#00ff99]">Admin</span></h1>
+      <main className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+        <AdminNavbar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        
+        <div className="flex-1 p-4 sm:p-6 lg:p-8">
+          <div className="mb-6 sm:mb-8">
+            <p className="text-[#00ff99] text-[10px] sm:text-xs font-black uppercase tracking-[3px] sm:tracking-[4px] mb-1 sm:mb-2">
+              Overview
+            </p>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white">
+              Dashboard <span className="text-[#00ff99]">Admin</span>
+            </h1>
           </div>
 
-          {/* CARD STATISTIK */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-10">
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all">
+          {/* CARD STATISTIK - Responsive Grid */}
+          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5 mb-8 sm:mb-10">
+            {/* Card Total Reservasi */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold">Total Reservasi</p>
-                  <h2 className="text-3xl font-black text-white mt-1">{statistik.totalReservasi}</h2>
+                <div className="min-w-0">
+                  <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
+                    Total Reservasi
+                  </p>
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white mt-1">
+                    {statistik.totalReservasi}
+                  </h2>
                 </div>
-                <FontAwesomeIcon icon={faClipboardList} className="text-slate-700 text-2xl" />
+                <FontAwesomeIcon icon={faClipboardList} className="text-slate-700 text-lg sm:text-2xl group-hover:text-[#00ff99]/30 transition-colors" />
               </div>
             </div>
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all">
+
+            {/* Card Reservasi Hari Ini */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold">Reservasi Hari Ini</p>
-                  <h2 className="text-3xl font-black text-blue-400 mt-1">{statistik.reservasiHariIni}</h2>
+                <div className="min-w-0">
+                  <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
+                    Reservasi Hari Ini
+                  </p>
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-blue-400 mt-1">
+                    {statistik.reservasiHariIni}
+                  </h2>
                 </div>
-                <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-700 text-2xl" />
+                <FontAwesomeIcon icon={faCalendarAlt} className="text-slate-700 text-lg sm:text-2xl group-hover:text-blue-400/30 transition-colors" />
               </div>
             </div>
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all">
+
+            {/* Card Total User */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold">Total User</p>
-                  <h2 className="text-3xl font-black text-purple-400 mt-1">{statistik.totalMember}</h2>
+                <div className="min-w-0">
+                  <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
+                    Total Member
+                  </p>
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-purple-400 mt-1">
+                    {statistik.totalMember}
+                  </h2>
                 </div>
-                <FontAwesomeIcon icon={faUsers} className="text-slate-700 text-2xl" />
+                <FontAwesomeIcon icon={faUsers} className="text-slate-700 text-lg sm:text-2xl group-hover:text-purple-400/30 transition-colors" />
               </div>
             </div>
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all">
+
+            {/* Card Total Kasir */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold">Total Kasir</p>
-                  <h2 className="text-3xl font-black text-amber-400 mt-1">{statistik.totalKasir}</h2>
+                <div className="min-w-0">
+                  <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
+                    Total Kasir
+                  </p>
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-amber-400 mt-1">
+                    {statistik.totalKasir}
+                  </h2>
                 </div>
-                <FontAwesomeIcon icon={faUserPlus} className="text-slate-700 text-2xl" />
+                <FontAwesomeIcon icon={faUserPlus} className="text-slate-700 text-lg sm:text-2xl group-hover:text-amber-400/30 transition-colors" />
               </div>
             </div>
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all">
+
+            {/* Card Pendapatan */}
+            <div className="xs:col-span-2 lg:col-span-1 bg-gradient-to-r from-[#00ff99]/10 to-transparent border border-[#00ff99]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/50 transition-all group">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider font-bold">Pendapatan Hari Ini</p>
-                  <h2 className="text-xl font-black text-[#00ff99] mt-1">Rp {statistik.pendapatanHariIni.toLocaleString("id-ID")}</h2>
+                <div className="min-w-0">
+                  <p className="text-[#00ff99] text-[10px] sm:text-xs uppercase tracking-wider font-bold">
+                    Pendapatan Hari Ini
+                  </p>
+                  <h2 className="text-base sm:text-lg lg:text-xl font-black text-[#00ff99] mt-1 break-words">
+                    Rp {statistik.pendapatanHariIni.toLocaleString("id-ID")}
+                  </h2>
                 </div>
-                <FontAwesomeIcon icon={faMoneyBillWave} className="text-slate-700 text-2xl" />
+                <FontAwesomeIcon icon={faMoneyBillWave} className="text-[#00ff99]/40 text-lg sm:text-2xl" />
               </div>
             </div>
           </div>
 
-          {/* TABLE */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center">
-              <h2 className="text-lg font-black text-white">Data Reservasi Terbaru</h2>
-              <button onClick={() => navigate("/monitor")} className="text-xs text-[#00ff99] hover:underline flex items-center gap-1">
+          {/* TABLE RESERVASI */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <h2 className="text-base sm:text-lg font-black text-white">Data Reservasi Terbaru</h2>
+              <button 
+                onClick={() => navigate("/monitor")} 
+                className="text-xs text-[#00ff99] hover:underline flex items-center gap-1 min-h-[36px] px-3 py-1.5 rounded-lg hover:bg-[#00ff99]/10 transition-all"
+              >
                 Lihat semua <FontAwesomeIcon icon={faArrowRight} size={10} />
               </button>
             </div>
+            
+            {/* Tabel dengan overflow horizontal untuk HP */}
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-800/50 text-left">
+              <table className="w-full min-w-[640px]">
+                <thead className="bg-slate-800/50">
                   <tr>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">ID</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Pelanggan</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Meja</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Tanggal</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Jam</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Durasi</th>
-                    <th className="p-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">ID</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Pelanggan</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Meja</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Tanggal</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Jam</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Durasi</th>
+                    <th className="p-3 sm:p-4 text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dataReservasi.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="p-10 text-center text-slate-500">Belum ada data reservasi</td>
+                      <td colSpan="7" className="p-8 sm:p-10 text-center text-slate-500 text-sm">
+                        Belum ada data reservasi
+                      </td>
                     </tr>
                   ) : (
                     dataReservasi.map((item) => {
                       const statusBadge = getStatusBadge(item.status);
                       return (
                         <tr key={item.id} className="border-t border-slate-800/50 hover:bg-slate-800/20 transition-all">
-                          <td className="p-4 text-sm text-slate-300">{item.id}</td>
-                          <td className="p-4 font-medium text-white">{item.pelanggan}</td>
-                          <td className="p-4 text-slate-300">{item.meja}</td>
-                          <td className="p-4 text-slate-400">{item.tanggal}</td>
-                          <td className="p-4 text-slate-300">
-                            <FontAwesomeIcon icon={faClock} className="mr-2 text-slate-500" size={12} />
+                          <td className="p-3 sm:p-4 text-xs sm:text-sm text-slate-300">{item.id}</td>
+                          <td className="p-3 sm:p-4 font-medium text-white text-xs sm:text-sm">{item.pelanggan}</td>
+                          <td className="p-3 sm:p-4 text-slate-300 text-xs sm:text-sm">{item.meja}</td>
+                          <td className="p-3 sm:p-4 text-slate-400 text-xs sm:text-sm">{item.tanggal}</td>
+                          <td className="p-3 sm:p-4 text-slate-300 text-xs sm:text-sm whitespace-nowrap">
+                            <FontAwesomeIcon icon={faClock} className="mr-1 sm:mr-2 text-slate-500 text-[10px] sm:text-xs" />
                             {item.jam}
                           </td>
-                          <td className="p-4 text-slate-300">{item.durasi} Jam</td>
-                          <td className="p-4">
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold ${statusBadge.bg} ${statusBadge.color}`}>
-                              <FontAwesomeIcon icon={statusBadge.icon} size={10} />
-                              {statusBadge.label}
+                          <td className="p-3 sm:p-4 text-slate-300 text-xs sm:text-sm">{item.durasi} Jam</td>
+                          <td className="p-3 sm:p-4">
+                            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold ${statusBadge.bg} ${statusBadge.color} whitespace-nowrap`}>
+                              <FontAwesomeIcon icon={statusBadge.icon} size={8} className="sm:text-[10px]" />
+                              <span className="hidden xs:inline">{statusBadge.label}</span>
                             </span>
                           </td>
                         </tr>
