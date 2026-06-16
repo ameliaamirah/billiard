@@ -283,12 +283,12 @@
     break-inside: avoid;
   }
   
-  /* Warna hitam putih untuk print */
+  /* Warna hitam putih untuk print
   .text-green-700,
   .text-emerald-400,
   .text-[#00ff99] {
     color: black !important;
-  }
+  } */
   
   .text-gray-500, 
   .text-gray-600,

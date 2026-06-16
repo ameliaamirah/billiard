@@ -80,12 +80,12 @@ export default function ReservasiPage() {
       if (maxDurasi <= 0) {
         return { 
           valid: false, 
-          reason: `Jam mulai ${jamMulai} terlalu dekat dengan jam tutup.` 
+          reason: `Jam mulai ${jamMulai} terlalu dekat dengan jam tutup.`
         };
       }
       return { 
         valid: false, 
-        reason: `Waktu bermain akan melebihi jam operasional (berakhir pukul ${maxJam}). Maksimal durasi ${maxDurasi} jam.` 
+        reason: `Waktu bermain akan melebihi jam operasional (berakhir pukul ${maxJam}). Maksimal durasi ${maxDurasi} jam.`
       };
     }
     
@@ -222,13 +222,13 @@ export default function ReservasiPage() {
     if (form.meja && !isMejaSaatIniTersedia && mejaTersediaList.length > 0) {
       setForm(prev => ({ ...prev, meja: mejaTersediaList[0] }));
     }
-  }, [form.jam, form.durasi, form.tanggal]);
+  }, [form.jam, form.durasi, form.tanggal, isMejaSaatIniTersedia, mejaTersediaList]);
 
   useEffect(() => {
     if (form.jam && !isJamValid && availableHours.length > 0) {
       setForm(prev => ({ ...prev, jam: availableHours[0].value }));
     }
-  }, [form.durasi, form.tanggal]);
+  }, [form.durasi, form.tanggal, isJamValid, availableHours]);
 
   useEffect(() => {
     fetchReservasiAktif(form.tanggal);
@@ -543,12 +543,6 @@ export default function ReservasiPage() {
                 Silakan sebutkan nama Anda saat tiba di meja kasir.
               </p>
             </div>
-            <button 
-              onClick={() => { setSuccess(false); navigate("/"); }} 
-              className="w-full bg-white text-black font-black text-xs uppercase tracking-widest py-3.5 rounded-xl hover:bg-[#00ff99] transition-colors duration-300 cursor-pointer"
-            >
-              Kembali ke Beranda
-            </button>
           </div>
         </div>
       )}
