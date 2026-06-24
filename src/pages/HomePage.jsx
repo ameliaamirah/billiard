@@ -13,19 +13,16 @@ const HomePage = () => {
   }, []);
 
   return (
-    // Container utama: tinggi & lebar penuh, tanpa scroll
     <div className="h-screen w-full overflow-hidden relative">
-      {/* BACKGROUND GAMBAR - FULL LAYAR */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/images/home.png')" }}
       >
-        {/* Overlay gradien dan gelap */}
+        
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/50 to-slate-950/90" />
         <div className="absolute inset-0 bg-slate-950/40" />
       </div>
 
-      {/* GLOW EFFECT */}
       <div
         className={`
           absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
