@@ -3,10 +3,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
-  faCrown, faUsers, faClock, faCheckCircle, faTimesCircle, 
-  faCalendarAlt, faChartLine, faMoneyBillWave,
-  faClipboardList, faUtensils, faSpinner, faHourglassHalf,
-  faPlayCircle, faUserPlus, faArrowRight
+  faClock, faCheckCircle, faTimesCircle, 
+  faCalendarAlt, faMoneyBillWave,
+  faClipboardList, faSpinner, faHourglassHalf,
+  faPlayCircle, faUserPlus, faArrowRight, faUsers
 } from "@fortawesome/free-solid-svg-icons";
 import { supabase } from "../supabaseClient";
 import AdminSidebar from "../components/AdminSidebar";
@@ -20,7 +20,7 @@ export default function AdminDashboard() {
   const [statistik, setStatistik] = useState({
     totalReservasi: 0,
     reservasiHariIni: 0,
-    totalMember: 0,
+    totalUsers: 0, // Mengubah totalMember menjadi totalUsers
     totalKasir: 0,
     pendapatanHariIni: 0,
   });
@@ -94,15 +94,17 @@ export default function AdminDashboard() {
 
       let usersData = [];
       try {
+        // Mengambil semua user tanpa filter role agar mendapatkan 'Total Users' yang utuh
         const { data, error } = await supabase
           .from("users")
           .select("*");
         if (!error) usersData = data || [];
       } catch (e) {
-        console.warn("Tabel users belum ada, skip:", e.message);
+        console.warn("Tabel users gagal diakses:", e.message);
         usersData = [];
       }
 
+      // Menghitung jumlah kasir secara spesifik dari data users
       const totalKasir = usersData.filter(u => u.role === "kasir").length;
 
       const { data: riwayat, error: riwayatError } = await supabase
@@ -125,7 +127,7 @@ export default function AdminDashboard() {
       setStatistik({
         totalReservasi: reservasi.length,
         reservasiHariIni: reservasiHariIni.length,
-        totalMember: usersData.length,
+        totalUsers: usersData.length, // Berisi total keseluruhan user (6)
         totalKasir: totalKasir,
         pendapatanHariIni: pendapatanHariIni,
       });
@@ -209,10 +211,10 @@ export default function AdminDashboard() {
             </h1>
           </div>
 
-          {/* CARD STATISTIK - Responsive Grid */}
-          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-5 mb-8 sm:mb-10">
+          {/* CARD STATISTIK - Diubah kembali menjadi 5 Grid agar muat untuk Total Users */}
+          <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8 sm:mb-10">
             {/* Card Total Reservasi */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
@@ -227,7 +229,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Card Reservasi Hari Ini */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
@@ -241,15 +243,15 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Card Total User */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
+            {/* Card Total Users (Pengganti Total Member) */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
-                    Total Member
+                    Total Users
                   </p>
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-purple-400 mt-1">
-                    {statistik.totalMember}
+                    {statistik.totalUsers}
                   </h2>
                 </div>
                 <FontAwesomeIcon icon={faUsers} className="text-slate-700 text-lg sm:text-2xl group-hover:text-purple-400/30 transition-colors" />
@@ -257,7 +259,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Card Total Kasir */}
-            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/30 transition-all group">
+            <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl p-5 hover:border-[#00ff99]/30 transition-all group">
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <p className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider font-bold">
@@ -271,8 +273,8 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Card Pendapatan */}
-            <div className="xs:col-span-2 lg:col-span-1 bg-gradient-to-r from-[#00ff99]/10 to-transparent border border-[#00ff99]/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-[#00ff99]/50 transition-all group">
+            {/* Card Pendapatan Hari Ini */}
+            <div className="xs:col-span-2 lg:col-span-1 bg-gradient-to-r from-[#00ff99]/10 to-transparent border border-[#00ff99]/30 rounded-xl sm:rounded-2xl p-5 hover:border-[#00ff99]/50 transition-all group">
               <div className="flex justify-between items-start">
                 <div className="min-w-0">
                   <p className="text-[#00ff99] text-[10px] sm:text-xs uppercase tracking-wider font-bold">
@@ -299,7 +301,6 @@ export default function AdminDashboard() {
               </button>
             </div>
             
-            {/* Tabel dengan overflow horizontal untuk HP */}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px]">
                 <thead className="bg-slate-800/50">

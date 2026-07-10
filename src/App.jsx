@@ -10,7 +10,7 @@ import { useEffect } from "react";
 
 /* =========================================
    PAGES
-========================================= */
+========================================= */  
 import HomePage from "./pages/HomePage";
 import Reservasi from "./pages/ReservasiPage";
 import LoginKasirPage from "./pages/LoginKasirPage";
@@ -21,6 +21,8 @@ import MenuManagement from "./pages/MenuManagement";
 import MonitorKasir from "./pages/MonitorKasir"; 
 import ManageKasir from "./pages/ManageKasir";
 import LaporanShift from "./pages/LaporanShift";
+import RegisterKasirPage from "./pages/RegisterKasirPage";
+
 
 /* =========================================
    COMPONENTS
@@ -138,6 +140,15 @@ function LayoutUtama() {
             element={
               <ProtectedRoute allowedRole="kasir">
                 <DashboardUtamaKasir />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/register-kasir"
+            element={
+              <ProtectedRoute allowedRole="admin">
+                <RegisterKasirPage />
               </ProtectedRoute>
             }
           />

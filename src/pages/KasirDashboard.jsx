@@ -6,7 +6,7 @@ import {
   faSearch, faCoffee, faHistory, faPrint, 
   faTimes, faLock, faUser, faClock, faMoneyBillWave, faCheck,
   faReceipt, faFileExcel, faFilePdf, faPlus, faPlay, faStop, faTag,
-  faUsers, faBell, faChartLine, faHome
+  faUsers, faBell, faChartLine, faHome, faSignOutAlt, faArrowLeft
 } from "@fortawesome/free-solid-svg-icons";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -28,6 +28,8 @@ export default function KasirDashboard() {
   const [filterAktif, setFilterAktif] = useState("Semua"); 
   const [cariNama, setCariNama] = useState("");
   const [loading, setLoading] = useState(false);
+  const [kasirInfo, setKasirInfo] = useState({ nama: "", shift: "" });
+  const [checkingAuth, setCheckingAuth] = useState(true); // State untuk cek auth
 
   // State untuk Split Bill
   const [showSplitBillModal, setShowSplitBillModal] = useState(false);
@@ -51,6 +53,107 @@ export default function KasirDashboard() {
   
   // Ref untuk track notifikasi yang sudah dikirim
   const notifiedRef = useRef({});
+
+  // ==================== CEK SESSION & AUTH ====================
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // 1. Cek session dari Supabase (untuk login Google)
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session && session.user) {
+          console.log("✅ Session ditemukan dari Supabase:", session.user.email);
+          
+          // Jika ada session dari Google, sync ke localStorage
+          if (!localStorage.getItem("isLoggedIn")) {
+            console.log("✅ Syncing Google session to localStorage");
+            localStorage.setItem("isLoggedIn", "true");
+            localStorage.setItem("email", session.user.email);
+            localStorage.setItem("userId", session.user.id);
+            localStorage.setItem("nama_kasir", session.user.user_metadata?.full_name || session.user.email);
+            localStorage.setItem("role", "kasir");
+            localStorage.setItem("shift", "Pagi");
+          }
+          
+          // Set kasirInfo dari localStorage
+          const namaKasir = localStorage.getItem("nama_kasir") || "Kasir";
+          const shiftKasir = localStorage.getItem("shift") || "Pagi";
+          setKasirInfo({ nama: namaKasir, shift: shiftKasir });
+          setCheckingAuth(false);
+          return;
+        }
+        
+        // 2. Jika tidak ada session, cek localStorage (untuk login manual)
+        const isLoggedIn = localStorage.getItem("isLoggedIn");
+        if (!isLoggedIn || isLoggedIn !== "true") {
+          console.log("❌ Tidak ada session, redirect ke login");
+          navigate("/kasir-login", { replace: true });
+          return;
+        }
+        
+        // 3. Jika ada localStorage, set kasirInfo
+        const namaKasir = localStorage.getItem("nama_kasir") || "Kasir";
+        const shiftKasir = localStorage.getItem("shift") || "Pagi";
+        setKasirInfo({ nama: namaKasir, shift: shiftKasir });
+        setCheckingAuth(false);
+        
+      } catch (error) {
+        console.error("Session check error:", error);
+        navigate("/kasir-login", { replace: true });
+      }
+    };
+    
+    checkSession();
+    
+    // Listener untuk perubahan auth (deteksi login/logout dari Supabase)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("🔔 Auth state changed:", event);
+      
+      if (event === "SIGNED_IN" && session) {
+        console.log("✅ User signed in:", session.user.email);
+        localStorage.setItem("isLoggedIn", "true");
+        localStorage.setItem("email", session.user.email);
+        localStorage.setItem("userId", session.user.id);
+        localStorage.setItem("nama_kasir", session.user.user_metadata?.full_name || session.user.email);
+        localStorage.setItem("role", "kasir");
+        localStorage.setItem("shift", "Pagi");
+        
+        const namaKasir = localStorage.getItem("nama_kasir") || "Kasir";
+        const shiftKasir = localStorage.getItem("shift") || "Pagi";
+        setKasirInfo({ nama: namaKasir, shift: shiftKasir });
+        setCheckingAuth(false);
+      }
+      
+      if (event === "SIGNED_OUT") {
+        console.log("❌ User signed out");
+        localStorage.clear();
+        navigate("/kasir-login", { replace: true });
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  // ==================== FUNGSI LOGOUT ====================
+  const handleLogout = async () => {
+    try {
+      // Logout dari Supabase
+      await supabase.auth.signOut();
+      
+      // Hapus semua data localStorage
+      localStorage.clear();
+      
+      // Gunakan replace untuk menghindari history stack
+      navigate("/kasir-login", { replace: true });
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Tetap hapus localStorage dan redirect meskipun ada error
+      localStorage.clear();
+      navigate("/kasir-login", { replace: true });
+    }
+  };
 
   const getHargaPerJam = (nomorMeja) => {
     if (!nomorMeja) return 50000;
@@ -91,7 +194,8 @@ export default function KasirDashboard() {
       
       const { data: reservasi, error: reservasiError } = await supabase
         .from("reservasi_billiard")
-        .select("*");
+        .select("*")
+        .order("tanggal_main", { ascending: false });
       
       if (reservasiError) throw reservasiError;
       
@@ -649,7 +753,7 @@ export default function KasirDashboard() {
     
     try {
       const semuaNomorMejaTerpakai = daftarMeja
-        .filter(m => (m.status_pemesanan === "Playing" || m.status_pemesanan === "Disetujui") && m.id !== idMejaAsal)
+        .filter(m => (m.status_pemesanan === "Playing" || m.status_pemesanan === "Sudah Dibayar") && m.id !== idMejaAsal)
         .map(m => m.nomor_meja || "").filter(n => n).map(n => n.toLowerCase());
       
       const daftarSemuaMeja = ["Meja 1", "Meja 2", "Meja 3", "Meja 4", "Meja 5", "Meja 6", "Meja 7", "Meja 8", "Meja 9", "Meja 10", "Meja VIP 1", "Meja VIP 2"];
@@ -689,7 +793,7 @@ export default function KasirDashboard() {
       return;
     }
 
-    const namaKasir = prompt("Nama Kasir:", "") || "Kasir";
+    const namaKasir = kasirInfo.nama || prompt("Nama Kasir:", "") || "Kasir";
     
     let totalSewaMeja = 0, totalKantin = 0, totalTunai = 0, totalNonTunai = 0;
 
@@ -710,6 +814,7 @@ export default function KasirDashboard() {
       isOpen: true,
       reportData: {
         nama_kasir: namaKasir,
+        shift: kasirInfo.shift,
         waktu: waktu,
         total_transaksi: riwayatTransaksi.length,
         total_sewa_meja: totalSewaMeja,
@@ -757,6 +862,7 @@ export default function KasirDashboard() {
             </div>
             <p>WAKTU: ${reportData.waktu}</p>
             <p>KASIR: ${reportData.nama_kasir}</p>
+            <p>SHIFT: ${reportData.shift || "Pagi"}</p>
             <div class="border-top"></div>
             <div class="flex"><span>Sewa Meja:</span><span>Rp ${reportData.total_sewa_meja.toLocaleString("id-ID")}</span></div>
             <div class="flex"><span>Kantin:</span><span>Rp ${reportData.total_kantin.toLocaleString("id-ID")}</span></div>
@@ -780,9 +886,11 @@ export default function KasirDashboard() {
       </html>
     `;
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+    }
   };
 
   // ==================== FUNGSI TUTUP SHIFT ====================
@@ -845,6 +953,19 @@ export default function KasirDashboard() {
   
   const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + (curr.total_akhir || 0), 0);
 
+  // ==================== RENDER ====================
+  // Cek auth dulu sebelum loading data
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-[#090D1A] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-emerald-400 text-sm">Memverifikasi autentikasi...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#090D1A] flex items-center justify-center">
@@ -869,12 +990,15 @@ export default function KasirDashboard() {
             <p className="text-slate-400 text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
               Sistem Billing & Kantin Terpadu (Bayar di Muka)
             </p>
+            <p className="text-emerald-400/70 text-[8px] sm:text-[9px] mt-0.5">
+              👤 {kasirInfo.nama} • Shift {kasirInfo.shift}
+            </p>
           </div>
           
           {/* Tombol Aksi - Responsive Grid */}
           <div className="grid grid-cols-2 xs:grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
-              onClick={() => navigate("/reservasi")}
+              onClick={() => navigate("/reservasi", { replace: true })}
               className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 md:py-2.5 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all shadow-lg shadow-emerald-500/30 min-h-[36px] sm:min-h-[40px]"
             >
               <FontAwesomeIcon icon={faPlus} size={10} className="sm:text-xs md:text-sm" />
@@ -907,6 +1031,17 @@ export default function KasirDashboard() {
               <FontAwesomeIcon icon={faLock} size={10} className="sm:text-xs md:text-sm" />
               <span className="hidden xs:inline">Tutup Shift</span>
               <span className="xs:hidden">Shift</span>
+            </button>
+
+            {/* Tombol Logout */}
+            <button
+              onClick={handleLogout}
+              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all min-h-[36px] sm:min-h-[40px]"
+              title="Logout"
+            >
+              <FontAwesomeIcon icon={faSignOutAlt} size={10} className="sm:text-xs md:text-sm" />
+              <span className="hidden xs:inline">Logout</span>
+              <span className="xs:hidden">Keluar</span>
             </button>
 
             {/* Notification Bell */}
@@ -991,7 +1126,7 @@ export default function KasirDashboard() {
                     </tr>
                   ) : (
                     riwayatTerfilter.map((item, idx) => (
-                      <tr key={idx} className="border-t border-slate-800/40">
+                      <tr key={idx} className="border-t border-slate-800/40 hover:bg-slate-800/30 transition">
                         <td className="p-2 sm:p-3 text-[8px] sm:text-[9px]">{item.waktu_selesai}</td>
                         <td className="p-2 sm:p-3 font-bold text-emerald-400 text-xs sm:text-sm">{item.nomor_meja || "-"}</td>
                         <td className="p-2 sm:p-3 font-bold text-white text-xs sm:text-sm">{item.nama_pelanggan || "-"}</td>
@@ -1038,7 +1173,7 @@ export default function KasirDashboard() {
                 <p className="text-xs sm:text-sm text-slate-600 mt-1">Silakan buat reservasi terlebih dahulu.</p>
                 <div className="mt-4 sm:mt-6">
                   <button
-                    onClick={() => navigate("/reservasi")}
+                    onClick={() => navigate("/reservasi", { replace: true })}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 mx-auto min-h-[40px]"
                   >
                     <FontAwesomeIcon icon={faPlus} size={12} className="sm:text-sm" />
@@ -1110,6 +1245,14 @@ export default function KasirDashboard() {
                 <p className="text-[9px] sm:text-[10px] text-slate-400">PREVIEW LAPORAN</p>
               </div>
               <div className="space-y-1 text-[9px] sm:text-[10px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Shift:</span>
+                  <span className="text-white">{modalClosing.reportData.shift || "Pagi"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Kasir:</span>
+                  <span className="text-white">{modalClosing.reportData.nama_kasir}</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Sewa Meja:</span>
                   <span className="text-white">Rp {modalClosing.reportData.total_sewa_meja.toLocaleString("id-ID")}</span>
@@ -1183,6 +1326,12 @@ export default function KasirDashboard() {
                 <span>TOTAL</span>
                 <span>Rp {modalStruk.data.totalAkhir?.toLocaleString("id-ID")}</span>
               </div>
+              {modalStruk.data.diskon > 0 && (
+                <div className="flex justify-between text-green-600 text-[9px]">
+                  <span>Diskon</span>
+                  <span>-Rp {modalStruk.data.diskon.toLocaleString("id-ID")}</span>
+                </div>
+              )}
               <div className="flex justify-between text-[9px] sm:text-[10px]">
                 <span>METODE</span>
                 <span className="font-bold">{modalStruk.data.metode?.toUpperCase()}</span>
@@ -1245,6 +1394,13 @@ export default function KasirDashboard() {
         .scrollbar-thin::-webkit-scrollbar { height: 3px; }
         .scrollbar-thin::-webkit-scrollbar-track { background: rgba(51, 65, 85, 0.5); border-radius: 10px; }
         .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0, 255, 153, 0.3); border-radius: 10px; }
+        /* Tambahan untuk responsif */
+        @media (max-width: 480px) {
+          .xs\\:inline { display: inline !important; }
+          .xs\\:hidden { display: none !important; }
+          .xs\\:col-span-1 { grid-column: span 1 / span 1 !important; }
+          .xs\\:col-span-2 { grid-column: span 2 / span 2 !important; }
+        }
       `}</style>
 
     </div>

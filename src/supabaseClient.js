@@ -1,4 +1,3 @@
-// Simpan di D:/amel/Amel/coba/billiard1/royal-cue/src/supabaseClient.js
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = "https://conhiaojhyalflkccsen.supabase.co";

@@ -17,11 +17,12 @@ export default function ReservasiPage() {
   const [loadingMeja, setLoadingMeja] = useState(false);
   const [errorWaktu, setErrorWaktu] = useState("");
   
+  // ✅ PERBAIKAN: Menggunakan zona waktu lokal perangkat agar tanggal sinkron (Hari ini tanggal 11)
   const [form, setForm] = useState({ 
     nama: "", 
     nohp: "", 
     durasi: 1, 
-    tanggal: new Date().toISOString().split('T')[0], 
+    tanggal: new Date().toLocaleDateString('sv-SE'), 
     jam: "10:00",
     meja: "Meja 1"
   });
@@ -32,6 +33,12 @@ export default function ReservasiPage() {
     weekend: { start: 10 * 60, end: 27 * 60 }  // 10:00 - 03:00
   };
 
+  // Fungsi untuk mendapatkan menit saat ini
+  const getCurrentTimeMinutes = () => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  };
+
   // Konversi jam ke menit
   const timeToMinutes = (time) => {
     if (!time) return 0;
@@ -39,24 +46,21 @@ export default function ReservasiPage() {
     return hours * 60 + minutes;
   };
 
-  // Konversi menit ke format HH:MM (DIPERBAIKI - tidak menampilkan 26:00)
+  // Konversi menit ke format HH:MM
   const minutesToTime = (minutes) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     
-    // Jika jam >= 24, berarti esok hari
     if (hours >= 24) {
       const displayHour = hours - 24;
       return `${displayHour.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")} (esok hari)`;
     }
-    
     return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
   };
 
   // Fungsi untuk mendapatkan hari dalam seminggu
   const getDayType = (date) => {
     const day = new Date(date).getDay();
-    // 0 = Minggu, 6 = Sabtu
     if (day === 0 || day === 6) return "weekend";
     return "weekday";
   };
@@ -68,12 +72,9 @@ export default function ReservasiPage() {
     const jamSelesaiMenit = jamMulaiMenit + (durasiJam * 60);
     const batasOperasional = JAM_BUKA[dayType].end;
     
-    // Cek apakah jam mulai sebelum jam buka
     if (jamMulaiMenit < JAM_BUKA[dayType].start) {
       return { valid: false, reason: `Jam buka dimulai pukul 10:00` };
     }
-    
-    // Cek apakah selesai melebihi jam operasional
     if (jamSelesaiMenit > batasOperasional) {
       const maxJam = minutesToTime(batasOperasional);
       const maxDurasi = Math.floor((batasOperasional - jamMulaiMenit) / 60);
@@ -88,17 +89,16 @@ export default function ReservasiPage() {
         reason: `Waktu bermain akan melebihi jam operasional (berakhir pukul ${maxJam}). Maksimal durasi ${maxDurasi} jam.`
       };
     }
-    
     return { valid: true, reason: "" };
   };
 
-  // Generate daftar jam yang tersedia berdasarkan tanggal
+  // Generate daftar jam yang tersedia (filter waktu sekarang)
   const getAvailableHours = (tanggal) => {
     const dayType = getDayType(tanggal);
     const endHourValue = JAM_BUKA[dayType].end / 60; 
     const availableHours = [];
     
-    // Jam 10:00 - 23:00 (siang sampai malam)
+    // Jam 10:00 - 23:00
     for (let i = 10; i <= 23; i++) {
       const hourString = i.toString().padStart(2, "0") + ":00";
       availableHours.push({
@@ -106,8 +106,7 @@ export default function ReservasiPage() {
         label: hourString
       });
     }
-    
-    // Jam dini hari (00:00, 01:00, 02:00, dst) sesuai batas
+    // Jam dini hari (00:00, 01:00, dst)
     for (let i = 0; i < endHourValue - 24; i++) {
       const hourString = i.toString().padStart(2, "0") + ":00";
       availableHours.push({
@@ -115,11 +114,23 @@ export default function ReservasiPage() {
         label: `${hourString} (esok hari)`
       });
     }
+
+    // Filter jika tanggal adalah hari ini
+    // ✅ PERBAIKAN: Menggunakan zona waktu lokal perangkat agar sinkron dengan form
+    const today = new Date().toLocaleDateString('sv-SE');
+    if (tanggal === today) {
+      const currentMinutes = getCurrentTimeMinutes();
+      const minAllowedMinutes = currentMinutes; 
+      return availableHours.filter(hour => {
+        const minutes = timeToMinutes(hour.value);
+        return minutes >= minAllowedMinutes && minutes < 24 * 60;
+      });
+    }
     
     return availableHours;
   };
 
-  // Filter jam berdasarkan durasi (agar tidak melebihi jam operasional)
+  // Filter jam berdasarkan durasi
   const getAvailableHoursWithDuration = (tanggal, durasi) => {
     const allHours = getAvailableHours(tanggal);
     return allHours.filter(hour => {
@@ -128,14 +139,13 @@ export default function ReservasiPage() {
     });
   };
 
-  // CEK TABRAKAN WAKTU (memperhitungkan durasi)
+  // CEK TABRAKAN WAKTU
   const isTimeConflict = (existingJam, existingDurasi, newJam, newDurasi) => {
     if (!existingJam || existingJam === "-") return false;
     const existingStart = timeToMinutes(existingJam);
     const existingEnd = existingStart + (existingDurasi * 60);
     const newStart = timeToMinutes(newJam);
     const newEnd = newStart + (newDurasi * 60);
-    
     return (newStart < existingEnd && newEnd > existingStart);
   };
 
@@ -161,7 +171,6 @@ export default function ReservasiPage() {
 
       if (error) throw error;
       setReservasiAktif(data || []);
-      console.log("Reservasi aktif:", data);
     } catch (error) {
       console.error("Error fetch reservasi:", error);
     } finally {
@@ -173,12 +182,20 @@ export default function ReservasiPage() {
     return daftarMeja.filter(meja => isMejaTersedia(meja, jam, durasi));
   };
 
+  // handleTanggalChange 
   const handleTanggalChange = async (e) => {
     const newTanggal = e.target.value;
-    const defaultJam = "10:00";
+    await fetchReservasiAktif(newTanggal);
+    
+    const available = getAvailableHoursWithDuration(newTanggal, form.durasi);
+    const defaultJam = available.length > 0 ? available[0].value : "10:00";
+    
     setForm({...form, tanggal: newTanggal, jam: defaultJam});
     setErrorWaktu("");
-    await fetchReservasiAktif(newTanggal);
+    
+    if (available.length === 0) {
+      setErrorWaktu("⚠️ Tidak ada jam tersedia untuk hari ini (sudah melewati jam operasional atau batas waktu).");
+    }
   };
 
   const handleJamChange = (e) => {
@@ -219,16 +236,19 @@ export default function ReservasiPage() {
   const isFormValid = isMejaSaatIniTersedia && isJamValid && !errorWaktu;
 
   useEffect(() => {
+    if (!isJamValid && availableHours.length > 0) {
+      setForm(prev => ({ ...prev, jam: availableHours[0].value }));
+    }
+    if (availableHours.length === 0 && form.tanggal) {
+      setErrorWaktu("⚠️ Tidak ada jam tersedia untuk hari ini.");
+    }
+  }, [form.durasi, form.tanggal, isJamValid, availableHours]);
+
+  useEffect(() => {
     if (form.meja && !isMejaSaatIniTersedia && mejaTersediaList.length > 0) {
       setForm(prev => ({ ...prev, meja: mejaTersediaList[0] }));
     }
   }, [form.jam, form.durasi, form.tanggal, isMejaSaatIniTersedia, mejaTersediaList]);
-
-  useEffect(() => {
-    if (form.jam && !isJamValid && availableHours.length > 0) {
-      setForm(prev => ({ ...prev, jam: availableHours[0].value }));
-    }
-  }, [form.durasi, form.tanggal, isJamValid, availableHours]);
 
   useEffect(() => {
     fetchReservasiAktif(form.tanggal);
@@ -255,7 +275,17 @@ export default function ReservasiPage() {
       return;
     }
     
-    // Validasi jam operasional
+    // ✅ PERBAIKAN: Menggunakan zona waktu lokal perangkat agar sinkron
+    const today = new Date().toLocaleDateString('sv-SE');
+    if (form.tanggal === today) {
+      const currentMin = getCurrentTimeMinutes();
+      const selectedMin = timeToMinutes(form.jam);
+      if (selectedMin < currentMin) {
+        alert("⚠️ Jam mulai sudah lewat! Silakan pilih jam yang lebih baru.");
+        return;
+      }
+    }
+
     const check = isWithinOperatingHours(form.jam, form.durasi, form.tanggal);
     if (!check.valid) {
       alert(check.reason);
@@ -269,7 +299,6 @@ export default function ReservasiPage() {
     
     setLoading(true);
     try {
-      // Cek ulang ketersediaan (race condition)
       const { data: cekTerbaru, error: cekError } = await supabase
         .from("reservasi_billiard")
         .select("*")
@@ -414,7 +443,8 @@ export default function ReservasiPage() {
                   type="date" 
                   value={form.tanggal} 
                   required 
-                  min={new Date().toISOString().split('T')[0]}
+                  // ✅ PERBAIKAN: Pembatas tanggal minimal juga menggunakan waktu lokal hari ini
+                  min={new Date().toLocaleDateString('sv-SE')}
                   className="w-full bg-slate-900/60 border border-slate-800 p-4 pl-12 rounded-xl text-white outline-none focus:border-[#00ff99] transition-all font-medium text-sm" 
                   onChange={handleTanggalChange} 
                 />
