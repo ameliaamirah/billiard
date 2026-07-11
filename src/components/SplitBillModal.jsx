@@ -101,7 +101,7 @@ export default function SplitBillModal({
             <p>Tanggal: ${new Date().toLocaleString("id-ID")}</p>
             <div class="border-dashed"></div>
             <div class="flex"><span>Total Tagihan:</span><span>Rp ${totalTagihan.toLocaleString("id-ID")}</span></div>
-            <div class="flex"><span>Dibagi:</span><span>${splitResults.length} orang</span></div>
+            <div class="flex"><span>Divided:</span><span>${splitResults.length} orang</span></div>
             <div class="border-dashed"></div>
             <div class="flex font-bold"><span>Bayar:</span><span>Rp ${orang.total.toLocaleString("id-ID")}</span></div>
             <div class="flex"><span>Metode:</span><span>${orang.metode.toUpperCase()}</span></div>
@@ -139,11 +139,12 @@ export default function SplitBillModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl w-full max-w-[95%] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/95 backdrop-blur-md p-3 sm:p-4">
+      {/* 1. PERBAIKAN DI SINI: Ditambahkan flex flex-col dan max-h */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl w-full max-w-[95%] sm:max-w-2xl h-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
         
-        {/* HEADER - Responsive */}
-        <div className="p-4 sm:p-5 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
+        {/* HEADER - Tetap Di Atas */}
+        <div className="p-4 sm:p-5 bg-slate-950 border-b border-slate-800 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
               <FontAwesomeIcon icon={faUsers} className="text-emerald-400 text-sm sm:text-lg" />
@@ -164,10 +165,11 @@ export default function SplitBillModal({
           </button>
         </div>
 
-        <div className="p-4 sm:p-5">
+        {/* 2. PERBAIKAN DI SINI: Mengubah kontainer body menjadi flex flex-col dengan full height */}
+        <div className="p-4 sm:p-5 flex flex-col flex-1 overflow-hidden">
           
-          {/* INFORMASI TOTAL - Responsive */}
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 sm:p-4 mb-4 sm:mb-5">
+          {/* INFORMASI TOTAL - Tetap Di Atas Area Konten */}
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 sm:p-4 mb-4 shrink-0">
             <div className="flex justify-between items-center flex-wrap gap-2">
               <span className="text-slate-400 text-xs sm:text-sm">Total Tagihan:</span>
               <span className="text-emerald-400 font-black text-xl sm:text-2xl break-words">
@@ -177,8 +179,8 @@ export default function SplitBillModal({
           </div>
 
           {splitResults.length === 0 ? (
-            // FORM SETTING SPLIT - Responsive
-            <div className="space-y-4 sm:space-y-5">
+            // FORM SETTING SPLIT - Dibungkus scroll otomatis jika layar kekecilan
+            <div className="space-y-4 sm:space-y-5 flex-1 overflow-y-auto pr-1">
               {/* Jumlah Orang */}
               <div>
                 <label className="text-slate-400 text-xs sm:text-sm block mb-2 flex items-center gap-2">
@@ -212,7 +214,7 @@ export default function SplitBillModal({
                 </p>
               </div>
 
-              {/* Metode Pembayaran - Responsive Grid */}
+              {/* Metode Pembayaran */}
               <div>
                 <label className="text-slate-400 text-xs sm:text-sm block mb-2 flex items-center gap-2">
                   <FontAwesomeIcon icon={faWallet} className="text-sm" /> Metode Pembayaran
@@ -239,8 +241,8 @@ export default function SplitBillModal({
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-2 sm:pt-4">
+              {/* Action Buttons Utama */}
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={onClose}
                   className="flex-1 py-2.5 sm:py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-bold text-xs sm:text-sm transition-all min-h-[44px]"
@@ -258,9 +260,12 @@ export default function SplitBillModal({
               </div>
             </div>
           ) : (
-            // DAFTAR PEMBAGIAN PER ORANG - Responsive
-            <div className="space-y-3 sm:space-y-4">
-              <div className="max-h-[350px] sm:max-h-[400px] overflow-y-auto space-y-2 sm:space-y-3 pr-1">
+            // DAFTAR PEMBAGIAN PER ORANG 
+            // 3. PERBAIKAN DI SINI: Mengubah susunan agar list orang ter-scroll terpisah dari totalan bawah
+            <div className="flex flex-col flex-1 overflow-hidden space-y-4">
+              
+              {/* Area List Orang (Hanya area ini yang akan scroll) */}
+              <div className="flex-1 overflow-y-auto space-y-2 sm:space-y-3 pr-1">
                 {splitResults.map((orang, idx) => (
                   <div
                     key={idx}
@@ -311,8 +316,7 @@ export default function SplitBillModal({
                           className="flex-1 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-2 transition-all min-h-[40px]"
                         >
                           <FontAwesomeIcon icon={faMoneyBillWave} className="text-xs sm:text-sm" />
-                          <span className="hidden xs:inline">Bayar</span>
-                          <span className="xs:hidden">Bayar</span>
+                          <span>Bayar</span>
                         </button>
                       ) : (
                         <button
@@ -320,8 +324,7 @@ export default function SplitBillModal({
                           className="flex-1 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-2 transition-all min-h-[40px]"
                         >
                           <FontAwesomeIcon icon={faPrint} className="text-xs sm:text-sm" />
-                          <span className="hidden xs:inline">Cetak Struk</span>
-                          <span className="xs:hidden">Cetak</span>
+                          <span>Cetak Struk</span>
                         </button>
                       )}
                     </div>
@@ -329,8 +332,8 @@ export default function SplitBillModal({
                 ))}
               </div>
 
-              {/* TOTAL KESELURUHAN */}
-              <div className="bg-slate-800/30 rounded-xl p-3 sm:p-4">
+              {/* TOTAL KESELURUHAN - Tetap Diam Di Bawah List */}
+              <div className="bg-slate-800/30 rounded-xl p-3 sm:p-4 shrink-0 border border-slate-800">
                 <div className="flex justify-between text-xs sm:text-sm">
                   <span className="text-slate-400">Total Dibayar:</span>
                   <span className="text-white font-bold">
@@ -345,8 +348,8 @@ export default function SplitBillModal({
                 </div>
               </div>
 
-              {/* TOMBOL SELESAI */}
-              <div className="flex gap-3 pt-2">
+              {/* TOMBOL SELESAI ACTIONS - Tetap Diam Di Paling Bawah */}
+              <div className="flex gap-3 shrink-0">
                 <button
                   onClick={() => setSplitResults([])}
                   className="flex-1 py-2.5 sm:py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-bold text-xs sm:text-sm transition-all min-h-[44px]"
@@ -367,9 +370,9 @@ export default function SplitBillModal({
           )}
         </div>
 
-        {/* FOOTER */}
+        {/* FOOTER - Tetap Di Paling Bawah Modal */}
         {splitResults.length === 0 && (
-          <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/50">
+          <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950/50 shrink-0">
             <p className="text-[8px] sm:text-[10px] text-slate-500 text-center">
               Fitur Split Bill - Bayar terpisah untuk rombongan
             </p>
