@@ -15,56 +15,73 @@ export default function LoginAdminPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true); // Sudah diperbaiki dari sebelumnya 'loading(true)'
+    setLoading(true);
     setError("");
 
     try {
-      // Mengubah filter pencarian dari 'username' menjadi 'email'
-      const { data, error: fetchError } = await supabase
+      console.log("🔍 Mencoba login auth resmi untuk email:", email.trim().toLowerCase());
+
+      // 1. LOGIN MENGGUNAKAN SUPABASE AUTH (Aman & Melewati RLS dengan Benar)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password,
+      });
+
+      if (authError) {
+        console.error("❌ Auth Error:", authError.message);
+        setError("Email atau Password salah!");
+        setLoading(false);
+        return;
+      }
+
+      const sessionUser = authData.user;
+      console.log("✅ Autentikasi Berhasil. UID Bawaan:", sessionUser.id);
+
+      // 2. AMBIL DATA ROLE DARI TABEL PROFIL/USERS KUSTOM KAMU
+      const { data: userData, error: fetchError } = await supabase
         .from("users")
         .select("*")
-        .eq("email", email.trim().toLowerCase())
-        .eq("role", "admin");
+        .eq("id", sessionUser.id) // Mencari berdasarkan ID autentikasi yang sukses
+        .single();
 
-      if (fetchError) {
-        console.error("Error fetching admin:", fetchError);
-        setError("Terjadi kesalahan koneksi database!");
+      if (fetchError || !userData) {
+        console.error("❌ Gagal mengambil data profil / data tidak ada:", fetchError);
+        // Jika gagal dapat data role, paksa sign out demi keamanan
+        await supabase.auth.signOut();
+        setError("Profil pengguna tidak ditemukan di database!");
         setLoading(false);
         return;
       }
 
-      if (!data || data.length === 0) {
-        setError("Email admin tidak ditemukan!");
+      // 3. VALIDASI APAKAH USER ADALAH ADMIN
+      const userRole = userData.role ? userData.role.toLowerCase() : "";
+      if (userRole !== "admin") {
+        await supabase.auth.signOut();
+        setError(`Akun ini bukan admin! (Role Anda: ${userData.role || "Tidak Ada"})`);
         setLoading(false);
         return;
       }
 
-      const user = data[0];
+      // 4. SIMPAN DATA KE LOCALSTORAGE JIKA BERHASIL
+      console.log("🎉 Selamat Datang Admin:", userData.email);
+      localStorage.setItem("isLoggedIn", "true");
+      localStorage.setItem("role", userData.role);
+      localStorage.setItem("email", userData.email);
+      localStorage.setItem("userId", userData.id);
+      localStorage.setItem("nama_admin", userData.name || userData.nama_lengkap || userData.email);
+      
+      navigate("/admin-dashboard");
 
-      if (user.password === password) {
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("role", user.role);
-        localStorage.setItem("email", user.email);
-        localStorage.setItem("userId", user.id);
-        localStorage.setItem("nama_admin", user.nama_lengkap || user.email);
-        
-        navigate("/admin-dashboard");
-      } else {
-        setError("Password salah!");
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      setError("Terjadi kesalahan, silakan coba lagi.");
+    } catch (err) {
+      console.error("❌ Sistem Mengalami Kegagalan:", err);
+      setError("Terjadi kesalahan sistem, silakan coba lagi.");
       setLoading(false);
     }
   };
 
   return (
-    // Memaksa satu layar penuh anti-scroll dengan background gambar home premium
     <div className="fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-center p-4 select-none box-border m-0 bg-slate-950">
       
-      {/* BACKGROUND IMAGE DENGAN OVERLAY YANG LEBIH TERANG */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/images/admin.png')" }}
@@ -73,13 +90,12 @@ export default function LoginAdminPage() {
         <div className="absolute inset-0 bg-emerald-950/5 backdrop-blur-[1px]" />
       </div>
 
-      {/* HEADER UTAMA DI LUAR CARD */}
       <div className="relative z-10 text-center mb-6 flex flex-col items-center animate-fadeIn flex-shrink-0">
         <div className="flex justify-center mb-2 animate-fadeIn">
           <div className="bg-white p-2 rounded-full shadow-lg flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 overflow-hidden border border-white/20">
             <img 
               src="/images/logo2.png" 
-              alt="Javatica Logo" 
+              alt="Royal Cue Logo" 
               className="w-full h-full object-contain rounded-full"
             />
           </div>
@@ -93,11 +109,9 @@ export default function LoginAdminPage() {
         </p>
       </div>
 
-      {/* CARD CONTAINER - SEKARANG JAUH LEBIH TRANSPARAN */}
       <div className="relative z-10 w-full max-w-[380px] sm:max-w-[420px] bg-[#1a1a1a]/35 backdrop-blur-2xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)] flex flex-col justify-between max-h-[85vh] box-border animate-fadeIn">
         
         <div>
-          {/* Teks Judul Dalam Card */}
           <h2 className="text-xl font-bold text-white mb-1 tracking-wide">
             Login Admin
           </h2>
@@ -105,16 +119,13 @@ export default function LoginAdminPage() {
             Masukkan kredensial Anda untuk mengakses kontrol inti
           </p>
 
-          {/* Notifikasi Error */}
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-200 text-xs text-center font-medium backdrop-blur-sm">
               ⚠️ {error}
             </div>
           )}
 
-          {/* Form Input */}
           <form onSubmit={handleLogin} className="space-y-4">
-            {/* Input Email */}
             <div className="space-y-1.5">
               <label className="block text-white text-xs font-semibold tracking-wide ml-0.5">
                 Email Admin
@@ -130,7 +141,6 @@ export default function LoginAdminPage() {
               />
             </div>
 
-            {/* Input Password */}
             <div className="space-y-1.5">
               <label className="block text-white text-xs font-semibold tracking-wide ml-0.5">
                 Password
@@ -156,7 +166,6 @@ export default function LoginAdminPage() {
               </div>
             </div>
 
-            {/* Tombol Login Hijau Solid Premium */}
             <button
               type="submit"
               disabled={loading}
@@ -174,7 +183,6 @@ export default function LoginAdminPage() {
           </form>
         </div>
 
-        {/* Tombol Kembali ke Homepage Minimalis */}
         <div className="flex justify-center mt-6">
           <button
             onClick={() => navigate("/")}
@@ -187,7 +195,6 @@ export default function LoginAdminPage() {
 
       </div>
 
-      {/* Footer Hak Cipta */}
       <div className="relative z-10 text-center mt-6 flex-shrink-0">
         <p className="text-slate-400 text-[10px] uppercase tracking-widest font-medium m-0 drop-shadow-sm">
           © 2026 ROYAL CUE BILLIARD. ALL RIGHTS RESERVED.

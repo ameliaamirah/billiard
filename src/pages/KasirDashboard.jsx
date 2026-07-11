@@ -29,9 +29,8 @@ export default function KasirDashboard() {
   const [cariNama, setCariNama] = useState("");
   const [loading, setLoading] = useState(false);
   const [kasirInfo, setKasirInfo] = useState({ nama: "", shift: "" });
-  const [checkingAuth, setCheckingAuth] = useState(true); // State untuk cek auth
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // State untuk Split Bill
   const [showSplitBillModal, setShowSplitBillModal] = useState(false);
   const [splitBillData, setSplitBillData] = useState({
     total: 0,
@@ -47,24 +46,18 @@ export default function KasirDashboard() {
   const [modalDiskon, setModalDiskon] = useState({ isOpen: false, mejaId: null, nomorMeja: "", pelanggan: "", totalSebelumDiskon: 0 });
 
   const { diskonAktif, applyDiskon, resetDiskon, hitungTotalSetelahDiskon } = useDiskon();
-  
-  // Hook notifikasi real-time
   const { notifyWaktuHampirHabis, notifyWaktuHabis } = useRealtimeNotification();
-  
-  // Ref untuk track notifikasi yang sudah dikirim
   const notifiedRef = useRef({});
 
   // ==================== CEK SESSION & AUTH ====================
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // 1. Cek session dari Supabase (untuk login Google)
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session && session.user) {
           console.log("✅ Session ditemukan dari Supabase:", session.user.email);
           
-          // Jika ada session dari Google, sync ke localStorage
           if (!localStorage.getItem("isLoggedIn")) {
             console.log("✅ Syncing Google session to localStorage");
             localStorage.setItem("isLoggedIn", "true");
@@ -75,7 +68,6 @@ export default function KasirDashboard() {
             localStorage.setItem("shift", "Pagi");
           }
           
-          // Set kasirInfo dari localStorage
           const namaKasir = localStorage.getItem("nama_kasir") || "Kasir";
           const shiftKasir = localStorage.getItem("shift") || "Pagi";
           setKasirInfo({ nama: namaKasir, shift: shiftKasir });
@@ -83,7 +75,6 @@ export default function KasirDashboard() {
           return;
         }
         
-        // 2. Jika tidak ada session, cek localStorage (untuk login manual)
         const isLoggedIn = localStorage.getItem("isLoggedIn");
         if (!isLoggedIn || isLoggedIn !== "true") {
           console.log("❌ Tidak ada session, redirect ke login");
@@ -91,7 +82,6 @@ export default function KasirDashboard() {
           return;
         }
         
-        // 3. Jika ada localStorage, set kasirInfo
         const namaKasir = localStorage.getItem("nama_kasir") || "Kasir";
         const shiftKasir = localStorage.getItem("shift") || "Pagi";
         setKasirInfo({ nama: namaKasir, shift: shiftKasir });
@@ -105,7 +95,6 @@ export default function KasirDashboard() {
     
     checkSession();
     
-    // Listener untuk perubahan auth (deteksi login/logout dari Supabase)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log("🔔 Auth state changed:", event);
       
@@ -139,17 +128,11 @@ export default function KasirDashboard() {
   // ==================== FUNGSI LOGOUT ====================
   const handleLogout = async () => {
     try {
-      // Logout dari Supabase
       await supabase.auth.signOut();
-      
-      // Hapus semua data localStorage
       localStorage.clear();
-      
-      // Gunakan replace untuk menghindari history stack
       navigate("/kasir-login", { replace: true });
     } catch (error) {
       console.error("Logout error:", error);
-      // Tetap hapus localStorage dan redirect meskipun ada error
       localStorage.clear();
       navigate("/kasir-login", { replace: true });
     }
@@ -160,7 +143,6 @@ export default function KasirDashboard() {
     return nomorMeja.toLowerCase().includes("vip") ? 80000 : 50000;
   };
 
-  // Fungsi untuk menghitung end time
   const calculateEndTime = (jamMulai, durasiJam) => {
     if (!jamMulai || jamMulai === "-" || jamMulai === "" || !durasiJam) return null;
     const [hours, minutes] = jamMulai.split(":").map(Number);
@@ -170,7 +152,6 @@ export default function KasirDashboard() {
     return startDate.getTime() + (durasiJam * 3600000);
   };
 
-  // Fungsi untuk membuka modal split bill
   const openSplitBill = (meja, pelanggan, total, items) => {
     setSplitBillData({
       total: total,
@@ -181,7 +162,6 @@ export default function KasirDashboard() {
     setShowSplitBillModal(true);
   };
 
-  // Fungsi proses setelah split bill selesai
   const handleSplitBillProcessed = async (splitResults, totalTagihan) => {
     console.log("Split bill processed:", splitResults);
     alert(`✅ Split bill berhasil!\n${splitResults.length} orang telah membayar.\nTotal: Rp ${totalTagihan.toLocaleString("id-ID")}`);
@@ -217,244 +197,137 @@ export default function KasirDashboard() {
     }
   };
 
-  // Fungsi untuk membatalkan reservasi yang sudah lewat tanggal
-  const batalkanReservasiKadaluarsa = async () => {
+  // ==================== FUNGSI CEK APAKAH RESERVASI EXPIRED ====================
+  const isReservasiExpired = (res) => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // Hanya cek untuk hari ini dan status Pending atau Sudah Dibayar
+    if (res.tanggal_main !== today) return false;
+    if (!["Pending", "Sudah Dibayar"].includes(res.status_pemesanan)) return false;
+    if (!res.jam_mulai || res.jam_mulai === "-") return false;
+    
+    const [jamJadwal, menitJadwal] = res.jam_mulai.split(":").map(Number);
+    if (isNaN(jamJadwal) || isNaN(menitJadwal)) return false;
+    
+    const waktuJadwalMenit = (jamJadwal * 60) + (menitJadwal || 0);
+    const selisihMenit = waktuJadwalMenit - nowMinutes;
+    
+    // Expired jika sudah lewat 15 menit dari jadwal
+    return selisihMenit < -15;
+  };
+
+  // ==================== FUNGSI CEK & BATALKAN RESERVASI EXPIRED ====================
+  const batalkanReservasiExpired = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
       
-      const { data: kadaluarsa, error: selectError } = await supabase
+      // Ambil semua reservasi dengan status Pending atau Sudah Dibayar untuk hari ini
+      const { data: reservasiAktif, error: fetchError } = await supabase
         .from("reservasi_billiard")
-        .select("*")
-        .lt("tanggal_main", today)
-        .in("status_pemesanan", ["Pending", "Sudah Dibayar", "Playing"]);
+        .select("id, nomor_meja, nama_pelanggan, jam_mulai, status_pemesanan")
+        .eq("tanggal_main", today)
+        .in("status_pemesanan", ["Pending", "Sudah Dibayar"]);
       
-      if (selectError) throw selectError;
+      if (fetchError) throw fetchError;
       
-      if (kadaluarsa && kadaluarsa.length > 0) {
-        for (const reservasi of kadaluarsa) {
-          await supabase.from("reservasi_billiard").delete().eq("id", reservasi.id);
-        }
-        await fetchData();
-        if (kadaluarsa.length > 0) {
-          alert(`⚠️ ${kadaluarsa.length} reservasi kadaluarsa otomatis dibatalkan!`);
+      let expiredCount = 0;
+      let expiredList = [];
+      
+      for (const reservasi of reservasiAktif) {
+        // Jika jam_mulai tidak ada atau "-", skip
+        if (!reservasi.jam_mulai || reservasi.jam_mulai === "-") continue;
+        
+        const [jamJadwal, menitJadwal] = reservasi.jam_mulai.split(":").map(Number);
+        if (isNaN(jamJadwal) || isNaN(menitJadwal)) continue;
+        
+        const waktuJadwalMenit = (jamJadwal * 60) + (menitJadwal || 0);
+        const selisihMenit = waktuJadwalMenit - nowMinutes;
+        
+        // Jika sudah lewat 15 menit dari jadwal, batalkan
+        if (selisihMenit < -15) {
+          console.log(`⏰ Reservasi ${reservasi.nomor_meja} - ${reservasi.nama_pelanggan} expired (jadwal ${reservasi.jam_mulai})`);
+          expiredList.push(`${reservasi.nomor_meja} - ${reservasi.nama_pelanggan}`);
+          expiredCount++;
+          
+          // Hapus reservasi yang expired
+          const { error: deleteError } = await supabase
+            .from("reservasi_billiard")
+            .delete()
+            .eq("id", reservasi.id);
+          
+          if (deleteError) throw deleteError;
         }
       }
+      
+      if (expiredCount > 0) {
+        console.log(`✅ ${expiredCount} reservasi expired telah dibatalkan:`, expiredList);
+        await fetchData(); // Refresh data
+        // Tampilkan notifikasi
+        alert(`⚠️ ${expiredCount} reservasi expired otomatis dibatalkan:\n${expiredList.join('\n')}`);
+      }
+      
+      return expiredCount;
+      
     } catch (error) {
-      console.error("Error membatalkan reservasi kadaluarsa:", error);
+      console.error("Error checking expired reservations:", error);
+      return 0;
     }
   };
 
-  // Cek waktu setiap menit untuk notifikasi
-  useEffect(() => {
-    const interval = setInterval(() => {
-      daftarMeja.forEach(meja => {
-        if (meja.status_pemesanan === "Playing" && meja.jam_mulai && meja.jam_mulai !== "-") {
-          const endTime = calculateEndTime(meja.jam_mulai, meja.durasi_bermain);
-          if (endTime) {
-            const remaining = endTime - Date.now();
-            const remainingMinutes = Math.floor(remaining / 60000);
-            
-            if (remainingMinutes === 15 && !notifiedRef.current[`${meja.id}_15min`]) {
-              notifyWaktuHampirHabis(meja);
-              notifiedRef.current[`${meja.id}_15min`] = true;
-            }
-            
-            if (remainingMinutes === 5 && !notifiedRef.current[`${meja.id}_5min`]) {
-              notifyWaktuHampirHabis(meja);
-              notifiedRef.current[`${meja.id}_5min`] = true;
-            }
-            
-            if (remaining <= 0 && !notifiedRef.current[`${meja.id}_expired`]) {
-              notifyWaktuHabis(meja);
-              notifiedRef.current[`${meja.id}_expired`] = true;
-            }
-          }
-        }
-      });
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [daftarMeja, notifyWaktuHampirHabis, notifyWaktuHabis]);
-
-  useEffect(() => {
-    fetchData();
-    batalkanReservasiKadaluarsa();
-    
-    const channelReservasi = supabase
-      .channel('reservasi_changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'reservasi_billiard' }, 
-        () => {
-          fetchData();
-          batalkanReservasiKadaluarsa();
-          notifiedRef.current = {};
-        }
-      )
-      .subscribe();
-    
-    const channelRiwayat = supabase
-      .channel('riwayat_changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'riwayat_transaksi' }, 
-        () => fetchData()
-      )
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(channelReservasi);
-      supabase.removeChannel(channelRiwayat);
-    };
-  }, []);
-
-  // ==================== EXPORT EXCEL ====================
-  const exportToExcel = () => {
-    if (riwayatTransaksi.length === 0) {
-      alert("Belum ada data transaksi untuk diexport!");
-      return;
-    }
-    
-    try {
-      const exportData = riwayatTransaksi.map((item, index) => ({
-        "No": index + 1,
-        "Tanggal": item.waktu_selesai || "-",
-        "Nomor Struk": item.id_booking || "-",
-        "Meja": item.nomor_meja || "-",
-        "Pelanggan": item.nama_pelanggan || "-",
-        "Durasi": `${item.durasi || 1} Jam`,
-        "Sewa Meja": item.total_sewa || 0,
-        "Kantin/F&B": item.total_fb || 0,
-        "Diskon": item.diskon || 0,
-        "Total": item.total_akhir || 0,
-        "Metode Bayar": item.metode_pembayaran?.toUpperCase() || "-",
-      }));
-      
-      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
-      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
-      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
-      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
-      
-      exportData.push({
-        "No": "", "Tanggal": "", "Nomor Struk": "", "Meja": "", "Pelanggan": "", "Durasi": "",
-        "Sewa Meja": totalSewa, "Kantin/F&B": totalKantin, "Diskon": totalDiskon, "Total": totalOmset, "Metode Bayar": "TOTAL",
-      });
-      
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Laporan Transaksi");
-      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-      alert("✅ Laporan berhasil diexport ke Excel!");
-    } catch (error) {
-      console.error("Error export Excel:", error);
-      alert("Gagal export Excel: " + error.message);
-    }
-  };
-
-  // ==================== EXPORT PDF ====================
-  const exportToPDF = () => {
-    if (riwayatTransaksi.length === 0) {
-      alert("Belum ada data transaksi untuk diexport!");
-      return;
-    }
-    
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      
-      doc.setFontSize(18);
-      doc.setTextColor(0, 100, 0);
-      doc.text("ROYAL CUE BILLIARD", 14, 20);
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text("Jl. Jawa No. 10, Banyuwangi, Jawa Timur", 14, 28);
-      doc.text(`Telp: +62 812-3456-7890`, 14, 34);
-      doc.text(`Dicetak: ${new Date().toLocaleString("id-ID")}`, 14, 40);
-      
-      doc.setFontSize(14);
-      doc.setTextColor(0, 0, 0);
-      doc.text("LAPORAN TRANSAKSI", 14, 50);
-      
-      const tableData = riwayatTransaksi.map((item, index) => [
-        index + 1,
-        item.waktu_selesai || "-",
-        item.id_booking || "-",
-        item.nomor_meja || "-",
-        item.nama_pelanggan || "-",
-        `${item.durasi || 1} Jam`,
-        `Rp ${(item.total_sewa || 0).toLocaleString("id-ID")}`,
-        `Rp ${(item.total_fb || 0).toLocaleString("id-ID")}`,
-        `Rp ${(item.diskon || 0).toLocaleString("id-ID")}`,
-        `Rp ${(item.total_akhir || 0).toLocaleString("id-ID")}`,
-        item.metode_pembayaran?.toUpperCase() || "-",
-      ]);
-      
-      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
-      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
-      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
-      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
-      
-      autoTable(doc, {
-        startY: 55,
-        head: [["No", "Tanggal", "No. Struk", "Meja", "Pelanggan", "Durasi", "Sewa", "Kantin", "Diskon", "Total", "Metode"]],
-        body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [0, 100, 0], textColor: 255, fontStyle: 'bold' },
-        foot: [[
-          "", "", "", "", "", "", "",
-          { content: `Rp ${totalSewa.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
-          { content: `Rp ${totalKantin.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
-          { content: `Rp ${totalDiskon.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
-          { content: `Rp ${totalOmset.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold', textColor: [0, 100, 0] } },
-          "TOTAL"
-        ]],
-      });
-      
-      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(fileName);
-      alert("✅ Laporan berhasil diexport ke PDF!");
-    } catch (error) {
-      console.error("Error export PDF:", error);
-      alert("Gagal export PDF: " + error.message);
-    }
-  };
-
-  // ==================== FUNGSI MULAI MAIN ====================
-  const mulaiMain = async (id, nomorMeja) => {
-    const { data: mejaData, error: fetchError } = await supabase
-      .from("reservasi_billiard")
-      .select("jam_mulai, tanggal_main, durasi_bermain, nama_pelanggan")
-      .eq("id", id)
-      .single();
-    
-    if (fetchError) {
-      console.error("Error fetching meja data:", fetchError);
-      alert("Gagal memuat data meja!");
-      return;
-    }
-    
+  // ==================== FUNGSI VALIDASI WAKTU MAIN ====================
+  const cekWaktuMainValid = (mejaData) => {
     const now = new Date();
     const jamSekarang = now.getHours();
     const menitSekarang = now.getMinutes();
     
-    const [jamJadwal, menitJadwal] = (mejaData.jam_mulai || "00:00").split(":").map(Number);
+    // Jika jam_mulai tidak ada atau "-", anggap valid (untuk kasus tertentu)
+    if (!mejaData.jam_mulai || mejaData.jam_mulai === "-") {
+      return { valid: true, pesan: "" };
+    }
+    
+    const [jamJadwal, menitJadwal] = mejaData.jam_mulai.split(":").map(Number);
+    
+    if (isNaN(jamJadwal) || isNaN(menitJadwal)) {
+      return { valid: true, pesan: "" };
+    }
     
     const waktuSekarangMenit = (jamSekarang * 60) + menitSekarang;
     const waktuJadwalMenit = (jamJadwal * 60) + (menitJadwal || 0);
     const selisihMenit = waktuJadwalMenit - waktuSekarangMenit;
     
-    if (selisihMenit < -15) {
-      alert(`⚠️ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nSudah terlambat lebih dari 15 menit. Reservasi akan dibatalkan.`);
-      await supabase.from("reservasi_billiard").delete().eq("id", id);
-      await fetchData();
-      return;
-    }
-    
+    // Validasi: tidak boleh lebih dari 30 menit sebelum jadwal
     if (selisihMenit > 30) {
       const jamTunggu = Math.floor(selisihMenit / 60);
       const menitTunggu = selisihMenit % 60;
-      alert(`⚠️ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nMasih terlalu awal (${jamTunggu > 0 ? jamTunggu + " jam " : ""}${menitTunggu} menit lagi).\nSilakan mulai main mendekati jadwal reservasi.`);
-      return;
+      let pesanTunggu = "";
+      if (jamTunggu > 0) {
+        pesanTunggu += `${jamTunggu} jam `;
+      }
+      if (menitTunggu > 0) {
+        pesanTunggu += `${menitTunggu} menit`;
+      }
+      if (!pesanTunggu) pesanTunggu = "0 menit";
+      
+      return { 
+        valid: false, 
+        pesan: `⏰ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nMasih terlalu awal (${pesanTunggu} lagi).\nSilakan mulai main mendekati jadwal reservasi (maksimal 30 menit sebelum jadwal).` 
+      };
     }
     
+    // Validasi: tidak boleh lebih dari 15 menit setelah jadwal (terlambat)
+    if (selisihMenit < -15) {
+      return { 
+        valid: false, 
+        pesan: `⏰ Meja ini dijadwalkan jam ${mejaData.jam_mulai}.\nSudah terlambat lebih dari 15 menit.\nReservasi akan dibatalkan secara otomatis.`,
+        expired: true
+      };
+    }
+    
+    // Cek jam operasional
     const getDayType = (date) => {
       const day = new Date(date).getDay();
       if (day === 0 || day === 6) return "weekend";
@@ -466,24 +339,81 @@ export default function KasirDashboard() {
       weekend: { start: 10 * 60, end: 27 * 60 }
     };
     
-    const dayType = getDayType(mejaData.tanggal_main);
+    const dayType = getDayType(mejaData.tanggal_main || new Date().toISOString().split('T')[0]);
     const batasOperasional = JAM_BUKA[dayType];
     
     if (waktuSekarangMenit < batasOperasional.start) {
-      alert(`⚠️ Jam operasional dimulai pukul 10:00!\nSaat ini masih pukul ${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}`);
-      return;
+      return { 
+        valid: false, 
+        pesan: `⚠️ Jam operasional dimulai pukul 10:00!\nSaat ini masih pukul ${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}` 
+      };
     }
     
     if (waktuSekarangMenit >= batasOperasional.end) {
       const tutupJam = Math.floor(batasOperasional.end / 60);
       const tutupLabel = tutupJam >= 24 ? `esok hari pukul ${(tutupJam - 24).toString().padStart(2, '0')}:00` : `${tutupJam.toString().padStart(2, '0')}:00`;
-      alert(`⚠️ Jam operasional sudah berakhir pukul ${tutupLabel}!\nSilakan datang kembali besok.`);
-      return;
+      return { 
+        valid: false, 
+        pesan: `⚠️ Jam operasional sudah berakhir pukul ${tutupLabel}!\nSilakan datang kembali besok.` 
+      };
     }
     
-    const jamMulai = `${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}`;
-    
+    return { valid: true, pesan: "" };
+  };
+
+  // ==================== FUNGSI MULAI MAIN ====================
+  const mulaiMain = async (id, nomorMeja) => {
     try {
+      // Ambil data meja terbaru
+      const { data: mejaData, error: fetchError } = await supabase
+        .from("reservasi_billiard")
+        .select("*")
+        .eq("id", id)
+        .single();
+      
+      if (fetchError) {
+        console.error("Error fetching meja data:", fetchError);
+        alert("Gagal memuat data meja!");
+        return;
+      }
+      
+      // CEK APAKAH RESERVASI SUDAH EXPIRED SEBELUM VALIDASI
+      if (isReservasiExpired(mejaData)) {
+        alert(`⏰ Meja ini sudah expired (jadwal ${mejaData.jam_mulai}).\nReservasi akan dibatalkan.`);
+        await supabase.from("reservasi_billiard").delete().eq("id", id);
+        await fetchData();
+        return;
+      }
+      
+      // VALIDASI WAKTU MAIN - CEK KETAT
+      const validasi = cekWaktuMainValid(mejaData);
+      
+      if (!validasi.valid) {
+        // Jika sudah expired (terlambat > 15 menit), batalkan otomatis
+        if (validasi.expired) {
+          const confirmCancel = window.confirm(
+            `${validasi.pesan}\n\nBatalkan reservasi ini?`
+          );
+          if (confirmCancel) {
+            await supabase.from("reservasi_billiard").delete().eq("id", id);
+            await fetchData();
+            alert("✅ Reservasi berhasil dibatalkan.");
+          }
+          return;
+        }
+        
+        // Tampilkan pesan error lainnya
+        alert(validasi.pesan);
+        return;
+      }
+      
+      // Jika valid, lanjutkan proses mulai main
+      const now = new Date();
+      const jamSekarang = now.getHours();
+      const menitSekarang = now.getMinutes();
+      const jamMulai = `${jamSekarang.toString().padStart(2, '0')}:${menitSekarang.toString().padStart(2, '0')}`;
+      
+      // Update status meja menjadi Playing dengan jam mulai yang sebenarnya
       const { error } = await supabase
         .from("reservasi_billiard")
         .update({
@@ -496,6 +426,7 @@ export default function KasirDashboard() {
       
       await fetchData();
       alert(`✅ Meja ${nomorMeja} mulai dimainkan! Waktu mulai: ${jamMulai}`);
+      
     } catch (error) {
       console.error("Error:", error);
       alert("Gagal memulai main: " + error.message);
@@ -897,12 +828,43 @@ export default function KasirDashboard() {
   const selesaikanClosingDanReset = async () => {
     if (window.confirm("Konfirmasi tutup shift?\n\n- Laporan akan disimpan\n- Riwayat transaksi akan dihapus\n- Reservasi yang sudah selesai akan dihapus\n- Meja aktif akan direset ke status Pending")) {
       try {
+        // 1. SIMPAN LAPORAN KE ARSIP
         if (modalClosing.reportData) {
-          await supabase.from("arsip_laporan_owner").insert([modalClosing.reportData]);
+          const reportForDB = {
+            nama_kasir: modalClosing.reportData.nama_kasir,
+            shift: modalClosing.reportData.shift || "Pagi",
+            waktu: modalClosing.reportData.waktu || new Date().toLocaleString("id-ID"),
+            total_transaksi: modalClosing.reportData.total_transaksi || 0,
+            total_sewa_meja: modalClosing.reportData.total_sewa_meja || 0,
+            total_kantin: modalClosing.reportData.total_kantin || 0,
+            total_tunai: modalClosing.reportData.total_tunai || 0,
+            total_non_tunai: modalClosing.reportData.total_non_tunai || 0,
+            grand_total: modalClosing.reportData.grand_total || 0
+          };
+          
+          console.log("📝 Saving to arsip_laporan_owner:", reportForDB);
+          
+          const { error: insertError } = await supabase
+            .from("arsip_laporan_owner")
+            .insert([reportForDB]);
+          
+          if (insertError) {
+            console.error("❌ Error inserting into arsip_laporan_owner:", insertError);
+            throw insertError;
+          }
+          
+          console.log("✅ Successfully saved to arsip_laporan_owner");
         }
         
-        await supabase.from("riwayat_transaksi").delete().neq("id", 0);
+        // 2. HAPUS SEMUA RIWAYAT TRANSAKSI
+        const { error: deleteRiwayatError } = await supabase
+          .from("riwayat_transaksi")
+          .delete()
+          .neq("id", 0);
         
+        if (deleteRiwayatError) throw deleteRiwayatError;
+        
+        // 3. HAPUS RESERVASI YANG STATUSNYA SELESAI
         const { error: deleteSelesaiError } = await supabase
           .from("reservasi_billiard")
           .delete()
@@ -910,6 +872,7 @@ export default function KasirDashboard() {
         
         if (deleteSelesaiError) throw deleteSelesaiError;
         
+        // 4. RESET MEJA YANG AKTIF KE PENDING
         const { error: resetError } = await supabase
           .from("reservasi_billiard")
           .update({ 
@@ -925,16 +888,209 @@ export default function KasirDashboard() {
         setRiwayatTransaksi([]);
         setModalClosing({ isOpen: false, reportData: null });
         await fetchData();
-        alert("✅ Shift ditutup! Semua meja telah direset.");
+        alert("✅ Shift ditutup! Laporan telah disimpan ke arsip dan semua meja telah direset.");
         
       } catch (error) {
-        console.error("Error closing shift:", error);
-        alert("Gagal menutup shift: " + error.message);
+        console.error("❌ Error closing shift:", error);
+        alert("Gagal menutup shift: " + error.message + "\nSilakan coba lagi.");
       }
     }
   };
 
+  // ==================== EFFECT UNTUK CEK EXPIRED SETIAP 15 DETIK ====================
+  useEffect(() => {
+    // Cek expired saat pertama kali load
+    batalkanReservasiExpired();
+    
+    // Cek expired setiap 15 detik
+    const expiredInterval = setInterval(() => {
+      batalkanReservasiExpired();
+    }, 15000);
+    
+    return () => clearInterval(expiredInterval);
+  }, []);
+
+  // ==================== CEK WAKTU SETIAP MENIT UNTUK NOTIFIKASI ====================
+  useEffect(() => {
+    const interval = setInterval(() => {
+      daftarMeja.forEach(meja => {
+        // Skip jika reservasi sudah expired
+        if (isReservasiExpired(meja)) return;
+        
+        if (meja.status_pemesanan === "Playing" && meja.jam_mulai && meja.jam_mulai !== "-") {
+          const endTime = calculateEndTime(meja.jam_mulai, meja.durasi_bermain);
+          if (endTime) {
+            const remaining = endTime - Date.now();
+            const remainingMinutes = Math.floor(remaining / 60000);
+            
+            if (remainingMinutes === 15 && !notifiedRef.current[`${meja.id}_15min`]) {
+              notifyWaktuHampirHabis(meja);
+              notifiedRef.current[`${meja.id}_15min`] = true;
+            }
+            
+            if (remainingMinutes === 5 && !notifiedRef.current[`${meja.id}_5min`]) {
+              notifyWaktuHampirHabis(meja);
+              notifiedRef.current[`${meja.id}_5min`] = true;
+            }
+            
+            if (remaining <= 0 && !notifiedRef.current[`${meja.id}_expired`]) {
+              notifyWaktuHabis(meja);
+              notifiedRef.current[`${meja.id}_expired`] = true;
+            }
+          }
+        }
+      });
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [daftarMeja, notifyWaktuHampirHabis, notifyWaktuHabis]);
+
+  useEffect(() => {
+    fetchData();
+    
+    const channelReservasi = supabase
+      .channel('reservasi_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'reservasi_billiard' }, 
+        () => {
+          fetchData();
+          notifiedRef.current = {};
+        }
+      )
+      .subscribe();
+    
+    const channelRiwayat = supabase
+      .channel('riwayat_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'riwayat_transaksi' }, 
+        () => fetchData()
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channelReservasi);
+      supabase.removeChannel(channelRiwayat);
+    };
+  }, []);
+
+  // ==================== EXPORT EXCEL ====================
+  const exportToExcel = () => {
+    if (riwayatTransaksi.length === 0) {
+      alert("Belum ada data transaksi untuk diexport!");
+      return;
+    }
+    
+    try {
+      const exportData = riwayatTransaksi.map((item, index) => ({
+        "No": index + 1,
+        "Tanggal": item.waktu_selesai || "-",
+        "Nomor Struk": item.id_booking || "-",
+        "Meja": item.nomor_meja || "-",
+        "Pelanggan": item.nama_pelanggan || "-",
+        "Durasi": `${item.durasi || 1} Jam`,
+        "Sewa Meja": item.total_sewa || 0,
+        "Kantin/F&B": item.total_fb || 0,
+        "Diskon": item.diskon || 0,
+        "Total": item.total_akhir || 0,
+        "Metode Bayar": item.metode_pembayaran?.toUpperCase() || "-",
+      }));
+      
+      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
+      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
+      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
+      
+      exportData.push({
+        "No": "", "Tanggal": "", "Nomor Struk": "", "Meja": "", "Pelanggan": "", "Durasi": "",
+        "Sewa Meja": totalSewa, "Kantin/F&B": totalKantin, "Diskon": totalDiskon, "Total": totalOmset, "Metode Bayar": "TOTAL",
+      });
+      
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Laporan Transaksi");
+      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      alert("✅ Laporan berhasil diexport ke Excel!");
+    } catch (error) {
+      console.error("Error export Excel:", error);
+      alert("Gagal export Excel: " + error.message);
+    }
+  };
+
+  // ==================== EXPORT PDF ====================
+  const exportToPDF = () => {
+    if (riwayatTransaksi.length === 0) {
+      alert("Belum ada data transaksi untuk diexport!");
+      return;
+    }
+    
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      
+      doc.setFontSize(18);
+      doc.setTextColor(0, 100, 0);
+      doc.text("ROYAL CUE BILLIARD", 14, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Jl. Jawa No. 10, Banyuwangi, Jawa Timur", 14, 28);
+      doc.text(`Telp: +62 812-3456-7890`, 14, 34);
+      doc.text(`Dicetak: ${new Date().toLocaleString("id-ID")}`, 14, 40);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text("LAPORAN TRANSAKSI", 14, 50);
+      
+      const tableData = riwayatTransaksi.map((item, index) => [
+        index + 1,
+        item.waktu_selesai || "-",
+        item.id_booking || "-",
+        item.nomor_meja || "-",
+        item.nama_pelanggan || "-",
+        `${item.durasi || 1} Jam`,
+        `Rp ${(item.total_sewa || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.total_fb || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.diskon || 0).toLocaleString("id-ID")}`,
+        `Rp ${(item.total_akhir || 0).toLocaleString("id-ID")}`,
+        item.metode_pembayaran?.toUpperCase() || "-",
+      ]);
+      
+      const totalOmset = riwayatTransaksi.reduce((sum, item) => sum + (item.total_akhir || 0), 0);
+      const totalSewa = riwayatTransaksi.reduce((sum, item) => sum + (item.total_sewa || 0), 0);
+      const totalKantin = riwayatTransaksi.reduce((sum, item) => sum + (item.total_fb || 0), 0);
+      const totalDiskon = riwayatTransaksi.reduce((sum, item) => sum + (item.diskon || 0), 0);
+      
+      autoTable(doc, {
+        startY: 55,
+        head: [["No", "Tanggal", "No. Struk", "Meja", "Pelanggan", "Durasi", "Sewa", "Kantin", "Diskon", "Total", "Metode"]],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [0, 100, 0], textColor: 255, fontStyle: 'bold' },
+        foot: [[
+          "", "", "", "", "", "", "",
+          { content: `Rp ${totalSewa.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalKantin.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalDiskon.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold' } },
+          { content: `Rp ${totalOmset.toLocaleString("id-ID")}`, styles: { fontStyle: 'bold', textColor: [0, 100, 0] } },
+          "TOTAL"
+        ]],
+      });
+      
+      const fileName = `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      alert("✅ Laporan berhasil diexport ke PDF!");
+    } catch (error) {
+      console.error("Error export PDF:", error);
+      alert("Gagal export PDF: " + error.message);
+    }
+  };
+
+  // ==================== FILTER MEJA (DENGAN CEK EXPIRED) ====================
   const mejaTerfilter = daftarMeja.filter((meja) => {
+    // CEK APAKAH RESERVASI EXPIRED - JIKA EXPIRED, HILANGKAN DARI TAMPILAN
+    if (isReservasiExpired(meja)) {
+      return false; // Sembunyikan reservasi yang expired
+    }
+    
     const statusPilihan = meja.status_pemesanan || "Pending";
     const namaPelanggan = meja.nama_pelanggan || "";
     const nomorMeja = meja.nomor_meja || "";
@@ -954,7 +1110,6 @@ export default function KasirDashboard() {
   const totalOmsetHariIni = riwayatTransaksi.reduce((acc, curr) => acc + (curr.total_akhir || 0), 0);
 
   // ==================== RENDER ====================
-  // Cek auth dulu sebelum loading data
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-[#090D1A] flex items-center justify-center">
@@ -980,7 +1135,7 @@ export default function KasirDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-tr from-[#090D1A] via-[#0E172A] to-[#0F172A] text-slate-100 p-3 sm:p-4 md:p-6 lg:p-8 font-sans">
       
-      {/* ==================== HEADER RESPONSIVE ==================== */}
+      {/* ==================== HEADER ==================== */}
       <div className="no-print mb-4 sm:mb-6 md:mb-8">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800/60 pb-3 sm:pb-4 md:pb-6">
           <div>
@@ -995,7 +1150,7 @@ export default function KasirDashboard() {
             </p>
           </div>
           
-          {/* Tombol Aksi - Responsive Grid */}
+          {/* Tombol Aksi */}
           <div className="grid grid-cols-2 xs:grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={() => navigate("/reservasi", { replace: true })}
@@ -1033,7 +1188,6 @@ export default function KasirDashboard() {
               <span className="xs:hidden">Shift</span>
             </button>
 
-            {/* Tombol Logout */}
             <button
               onClick={handleLogout}
               className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-[9px] sm:text-[10px] md:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-2 cursor-pointer transition-all min-h-[36px] sm:min-h-[40px]"
@@ -1044,12 +1198,10 @@ export default function KasirDashboard() {
               <span className="xs:hidden">Keluar</span>
             </button>
 
-            {/* Notification Bell */}
             <div className="flex justify-center sm:justify-end">
               <NotificationBell />
             </div>
 
-            {/* Omset Card - Responsive */}
             <div className="col-span-2 xs:col-span-1 bg-slate-900/80 backdrop-blur-md border border-emerald-500/20 px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 rounded-xl">
               <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5">
                 <FontAwesomeIcon icon={faMoneyBillWave} className="text-emerald-400 text-[8px] sm:text-[9px] md:text-[11px]" />
@@ -1062,7 +1214,7 @@ export default function KasirDashboard() {
           </div>
         </div>
 
-        {/* TOOLBAR - Responsive */}
+        {/* TOOLBAR */}
         <div className="bg-slate-950/40 backdrop-blur-md border border-slate-800/80 p-2 sm:p-3 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row gap-2 sm:gap-3 justify-between items-center mt-3 sm:mt-4 md:mt-6">
           <div className="relative w-full sm:max-w-md">
             <FontAwesomeIcon icon={faSearch} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={10} />
@@ -1075,7 +1227,6 @@ export default function KasirDashboard() {
             />
           </div>
           
-          {/* Filter Tabs - Horizontal Scroll untuk HP */}
           <div className="flex gap-1 bg-slate-900/90 p-1 rounded-xl overflow-x-auto max-w-full sm:max-w-none scrollbar-thin">
             {["Semua", "Pending", "Sudah Dibayar", "Playing", "Selesai", "Riwayat"].map((tab) => (
               <button 
@@ -1246,8 +1397,8 @@ export default function KasirDashboard() {
               </div>
               <div className="space-y-1 text-[9px] sm:text-[10px]">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Shift:</span>
-                  <span className="text-white">{modalClosing.reportData.shift || "Pagi"}</span>
+                  <span className="text-slate-400">Waktu:</span>
+                  <span className="text-white">{modalClosing.reportData.waktu}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Kasir:</span>
@@ -1394,7 +1545,6 @@ export default function KasirDashboard() {
         .scrollbar-thin::-webkit-scrollbar { height: 3px; }
         .scrollbar-thin::-webkit-scrollbar-track { background: rgba(51, 65, 85, 0.5); border-radius: 10px; }
         .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0, 255, 153, 0.3); border-radius: 10px; }
-        /* Tambahan untuk responsif */
         @media (max-width: 480px) {
           .xs\\:inline { display: inline !important; }
           .xs\\:hidden { display: none !important; }

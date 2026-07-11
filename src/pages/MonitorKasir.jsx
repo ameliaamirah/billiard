@@ -7,7 +7,6 @@ import {
   faUsers, faSpinner, faCrown, faPhoneAlt, 
   faInfoCircle
 } from "@fortawesome/free-solid-svg-icons";
-// Import WhatsApp dari brands icons
 import { faWhatsapp } from "@fortawesome/free-brands-svg-icons";
 import { supabase } from "../supabaseClient";
 import AdminSidebar from "../components/AdminSidebar";
@@ -31,16 +30,52 @@ export default function MonitorKasir() {
     "00:00", "01:00", "02:00", "03:00"
   ];
 
+  // Helper untuk konversi jam operasional (termasuk lewat tengah malam) ke total menit
   const timeToMinutes = (time) => {
     if (!time || time === "-") return 0;
     const [hours, minutes] = time.split(":").map(Number);
-    return (hours || 0) * 60 + (minutes || 0);
+    // Jika jam antara 00:00 - 03:00, tambahkan 24 jam agar urutan menitnya linier setelah jam 23:00
+    const adjustedHours = hours < 4 ? hours + 24 : hours;
+    return adjustedHours * 60 + (minutes || 0);
+  };
+
+  // Mendapatkan waktu saat ini dalam total menit disesuaikan jam operasional
+  const getNowMinutes = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const adjustedHours = hours < 4 ? hours + 24 : hours;
+    return adjustedHours * 60 + minutes;
+  };
+
+  // Cek validitas reservasi berdasarkan waktu sekarang
+  const isReservasiExpired = (res) => {
+    const now = new Date();
+    const tanggalSekarang = now.toISOString().split('T')[0];
+    
+    // Jika melihat hari kemarin/lalu, status Pending otomatis dianggap hangus
+    if (tanggalFilter < tanggalSekarang) {
+      return res.status_pemesanan === "Pending";
+    }
+    // Jika hari ini, cek apakah jam mulai sudah terlewat dan statusnya masih Pending
+    if (tanggalFilter === tanggalSekarang) {
+      const nowMenit = getNowMinutes();
+      const mulaiMenit = timeToMinutes(res.jam_mulai);
+      
+      // Jika waktu sekarang sudah melewati jam_mulai (Bisa ditambah toleransi, misal: mulaiMenit + 15)
+      return nowMenit >= mulaiMenit && res.status_pemesanan === "Pending";
+    }
+    
+    return false; // Hari esok aman
   };
 
   const isJamTerisi = (jam, reservasiMeja) => {
     const jamMenit = timeToMinutes(jam);
     
     for (const res of reservasiMeja) {
+      // Abaikan jika reservasi sudah kedaluwarsa (Pending dan jamnya sudah lewat)
+      if (isReservasiExpired(res)) continue;
+
       const mulaiMenit = timeToMinutes(res.jam_mulai);
       const selesaiMenit = mulaiMenit + ((res.durasi_bermain || 1) * 60);
       
@@ -72,18 +107,22 @@ export default function MonitorKasir() {
 
   useEffect(() => {
     fetchReservasi();
+    // Opsional: Interval auto-refresh setiap 1 menit agar monitor update real-time mengikuti jam
+    const interval = setInterval(fetchReservasi, 60000);
+    return () => clearInterval(interval);
   }, [tanggalFilter]);
 
   const getReservasiByMeja = (meja) => {
-    return reservasi.filter(r => r.nomor_meja === meja);
+    // Filter out reservasi yang sudah kedaluwarsa agar tidak mengotori monitor meja aktif
+    return reservasi.filter(r => r.nomor_meja === meja && !isReservasiExpired(r));
   };
 
   const getStatusMeja = (meja) => {
-    const reservasiMeja = getReservasiByMeja(meja);
+    const reservasiMeja = getReservasiByMeja(meja); // Sudah otomatis menyaring yang expired
     if (reservasiMeja.length === 0) return "Kosong";
     
     const now = new Date();
-    const nowMenit = now.getHours() * 60 + now.getMinutes();
+    const nowMenit = getNowMinutes();
     const tanggalSekarang = now.toISOString().split('T')[0];
     
     if (tanggalFilter !== tanggalSekarang) {
@@ -114,6 +153,7 @@ export default function MonitorKasir() {
     setShowModal(true);
   };
 
+  // Filter pencarian nama (tetap menampilkan status real-time)
   const reservasiFiltered = reservasi.filter(r => 
     r.nama_pelanggan?.toLowerCase().includes(searchNama.toLowerCase())
   );
@@ -130,11 +170,12 @@ export default function MonitorKasir() {
   const getJamSelesai = (jamMulai, durasi) => {
     if (!jamMulai || jamMulai === "-") return "-";
     const [h, m] = jamMulai.split(":").map(Number);
-    const endHour = (h || 0) + (durasi || 1);
-    return `${(endHour || 0).toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
+    let endHour = (h || 0) + (durasi || 1);
+    if (endHour >= 24) endHour -= 24; // Handle format jika lewat tengah malam
+    return `${endHour.toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
   };
 
-  const totalReservasi = reservasi.length;
+  const totalReservasi = reservasi.filter(r => !isReservasiExpired(r)).length;
   const mejaTerisi = daftarMeja.filter(meja => getReservasiByMeja(meja).length > 0).length;
   const mejaPlaying = daftarMeja.filter(meja => getStatusMeja(meja) === "Sedang Digunakan").length;
 
@@ -158,7 +199,7 @@ export default function MonitorKasir() {
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 sm:p-4 text-center">
               <p className="text-slate-400 text-[9px] sm:text-[10px] uppercase tracking-wider">Total</p>
               <p className="text-xl sm:text-2xl font-black text-white">{totalReservasi}</p>
-              <p className="text-[8px] sm:text-[9px] text-slate-500">Reservasi</p>
+              <p className="text-[8px] sm:text-[9px] text-slate-500">Reservasi Aktif</p>
             </div>
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 sm:p-4 text-center">
               <p className="text-slate-400 text-[9px] sm:text-[10px] uppercase tracking-wider">Terisi</p>
@@ -172,7 +213,7 @@ export default function MonitorKasir() {
             </div>
           </div>
 
-          {/* Filter Bar - SAMA KAYAK VERSI KASIR */}
+          {/* Filter Bar */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6 sm:mb-8">
             <div className="relative flex-1">
               <FontAwesomeIcon icon={faCalendarAlt} className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs sm:text-sm" />
@@ -214,12 +255,13 @@ export default function MonitorKasir() {
             </div>
           ) : (
             <>
-              {/* Grid Meja - Responsive (SAMA KAYAK VERSI KASIR) */}
+              {/* Grid Meja */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-6 sm:mb-8">
                 {daftarMeja.map((meja) => {
                   const status = getStatusMeja(meja);
                   const statusColor = getStatusColor(status);
-                  const reservasiCount = getReservasiByMeja(meja).length;
+                  const reservasiMejaAktif = getReservasiByMeja(meja);
+                  const reservasiCount = reservasiMejaAktif.length;
                   const isVip = meja.includes("VIP");
                   
                   return (
@@ -248,7 +290,7 @@ export default function MonitorKasir() {
                       </div>
 
                       <div className="space-y-2 mb-3 sm:mb-4 max-h-28 sm:max-h-32 overflow-y-auto">
-                        {getReservasiByMeja(meja).slice(0, 2).map((res, idx) => (
+                        {reservasiMejaAktif.slice(0, 2).map((res, idx) => (
                           <div key={idx} className="bg-slate-800/30 rounded-lg p-1.5 sm:p-2 text-[10px] sm:text-xs">
                             <div className="flex flex-wrap justify-between gap-1">
                               <span className="font-medium text-slate-300 truncate max-w-[120px] sm:max-w-none">
@@ -264,12 +306,12 @@ export default function MonitorKasir() {
                             </div>
                           </div>
                         ))}
-                        {getReservasiByMeja(meja).length === 0 && (
+                        {reservasiCount === 0 && (
                           <p className="text-[10px] sm:text-xs text-slate-500 text-center py-3 sm:py-4">✨ Tidak ada reservasi</p>
                         )}
-                        {getReservasiByMeja(meja).length > 2 && (
+                        {reservasiCount > 2 && (
                           <p className="text-[8px] sm:text-[9px] text-slate-500 text-center">
-                            +{getReservasiByMeja(meja).length - 2} lainnya
+                            +{reservasiCount - 2} lainnya
                           </p>
                         )}
                       </div>
@@ -287,7 +329,7 @@ export default function MonitorKasir() {
                 })}
               </div>
 
-              {/* Ringkasan Semua Reservasi (SAMA KAYAK VERSI KASIR) */}
+              {/* Ringkasan Semua Reservasi */}
               <div className="bg-slate-900/40 border border-slate-800 rounded-xl sm:rounded-2xl overflow-hidden">
                 <div className="p-3 sm:p-4 border-b border-slate-800">
                   <h3 className="font-bold flex items-center gap-2 text-white text-xs sm:text-sm">
@@ -317,13 +359,21 @@ export default function MonitorKasir() {
                         </tr>
                       ) : (
                         reservasiFiltered.map((res) => {
+                          const expired = isReservasiExpired(res);
+                          let statusText = res.status_pemesanan || "Pending";
                           let statusColor = "text-yellow-400 bg-yellow-400/10";
-                          if (res.status_pemesanan === "Playing") statusColor = "text-green-400 bg-green-400/10";
-                          if (res.status_pemesanan === "Sudah Dibayar") statusColor = "text-blue-400 bg-blue-400/10";
-                          if (res.status_pemesanan === "Selesai") statusColor = "text-slate-400 bg-slate-400/10";
+                          
+                          if (expired) {
+                            statusText = "Kedaluwarsa (Batal)";
+                            statusColor = "text-red-400 bg-red-400/10 line-through opacity-60";
+                          } else {
+                            if (res.status_pemesanan === "Playing") statusColor = "text-green-400 bg-green-400/10";
+                            if (res.status_pemesanan === "Sudah Dibayar") statusColor = "text-blue-400 bg-blue-400/10";
+                            if (res.status_pemesanan === "Selesai") statusColor = "text-slate-400 bg-slate-400/10";
+                          }
                           
                           return (
-                            <tr key={res.id} className="border-t border-slate-800/50 hover:bg-slate-800/30 transition-all">
+                            <tr key={res.id} className={`border-t border-slate-800/50 hover:bg-slate-800/30 transition-all ${expired ? 'opacity-50' : ''}`}>
                               <td className="p-2 sm:p-4 font-bold text-[#00ff99] text-xs sm:text-sm">{res.nomor_meja || "-"}</td>
                               <td className="p-2 sm:p-4 text-white text-[10px] sm:text-xs">{res.nama_pelanggan || "-"}</td>
                               <td className="p-2 sm:p-4 font-mono text-slate-300 text-[10px] sm:text-xs">{res.jam_mulai || "-"}</td>
@@ -331,7 +381,7 @@ export default function MonitorKasir() {
                               <td className="p-2 sm:p-4 text-slate-300 text-[10px] sm:text-xs">{res.durasi_bermain || 1} jam</td>
                               <td className="p-2 sm:p-4">
                                 <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[8px] sm:text-[9px] font-bold ${statusColor}`}>
-                                  {res.status_pemesanan || "Pending"}
+                                  {statusText}
                                 </span>
                               </td>
                               <td className="p-2 sm:p-4 text-slate-400 text-[10px] sm:text-xs hidden md:table-cell">
@@ -355,7 +405,7 @@ export default function MonitorKasir() {
         </div>
       </main>
 
-      {/* Modal Detail Jadwal Meja - Responsive (SAMA KAYAK VERSI KASIR) */}
+      {/* Modal Detail Jadwal Meja */}
       {showModal && selectedMeja && detailMeja && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl sm:rounded-2xl w-full max-w-[95%] sm:max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
@@ -374,7 +424,7 @@ export default function MonitorKasir() {
             </div>
 
             <div className="p-4 sm:p-5 overflow-y-auto max-h-[55vh] sm:max-h-[60vh]">
-              {/* Jam Grid - Responsive */}
+              {/* Jam Grid */}
               <div className="text-xs sm:text-sm text-slate-400 mb-2 flex items-center gap-2 flex-wrap">
                 <FontAwesomeIcon icon={faClock} size={10} />
                 <span>Ketersediaan Waktu</span>
@@ -387,6 +437,7 @@ export default function MonitorKasir() {
                 {jamOperasional.map((jam) => {
                   const isTerisi = isJamTerisi(jam, detailMeja);
                   const reservasiJam = detailMeja.find(r => {
+                    if (isReservasiExpired(r)) return false;
                     const mulaiMenit = timeToMinutes(r.jam_mulai);
                     const selesaiMenit = mulaiMenit + ((r.durasi_bermain || 1) * 60);
                     const jamMenit = timeToMinutes(jam);
@@ -400,7 +451,6 @@ export default function MonitorKasir() {
                   if (isTerisi) {
                     bgColor = "bg-red-500/20 border-red-500/50";
                     textColor = "text-red-400";
-                    label = jam;
                   } else if (jam === "00:00" || jam === "01:00" || jam === "02:00" || jam === "03:00") {
                     bgColor = "bg-slate-800/30 border-slate-700/50";
                     textColor = "text-slate-500";
@@ -430,7 +480,7 @@ export default function MonitorKasir() {
                 <div>
                   <h4 className="text-xs sm:text-sm font-bold text-slate-400 mb-2 sm:mb-3 flex items-center gap-2">
                     <FontAwesomeIcon icon={faInfoCircle} size={10} className="sm:text-xs" />
-                    Daftar Reservasi
+                    Daftar Reservasi Aktif
                   </h4>
                   <div className="space-y-1.5 sm:space-y-2">
                     {detailMeja.map((res, idx) => (

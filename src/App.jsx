@@ -1,12 +1,14 @@
-// src/App.jsx (dengan ScrollToTop)
+// src/App.jsx
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   useLocation,
   Navigate,
+  useNavigate,
 } from "react-router-dom";
 import { useEffect } from "react";
+import { supabase } from "./supabaseClient"; // Pastikan path import supabase Anda benar
 
 /* =========================================
    PAGES
@@ -22,7 +24,6 @@ import MonitorKasir from "./pages/MonitorKasir";
 import ManageKasir from "./pages/ManageKasir";
 import LaporanShift from "./pages/LaporanShift";
 import RegisterKasirPage from "./pages/RegisterKasirPage";
-
 
 /* =========================================
    COMPONENTS
@@ -51,6 +52,71 @@ function ScrollToTop() {
 }
 
 /* =========================================
+   IDLE TIMEOUT COMPONENT (1 JAM AUTO LOGOUT)
+========================================= */
+function IdleTimeoutHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Cek apakah user sedang berada di halaman dashboard/admin/kasir (bukan public area)
+    const isProtectedArea = [
+      "/admin-dashboard",
+      "/kasir-dashboard",
+      "/menu-management",
+      "/monitor",
+      "/manage-kasir",
+      "/laporan-shift",
+      "/register-kasir"
+    ].some(route => location.pathname.startsWith(route));
+
+    // Jika tidak di area dashboard, jangan aktifkan timer auto-logout
+    if (!isProtectedArea) return;
+
+    let timer;
+    const timeoutDuration = 60 * 60 * 1000;
+
+    const logoutUser = async () => {
+      try {
+        await supabase.auth.signOut();
+        alert("Sesi Anda telah berakhir karena tidak ada aktivitas selama 1 jam.");
+        
+        // Arahkan ke halaman login yang sesuai berdasarkan histori rutenya
+        if (location.pathname.includes("admin") || location.pathname.match(/(monitor|menu|manage|laporan)/)) {
+          navigate("/admin");
+        } else {
+          navigate("/kasir");
+        }
+      } catch (error) {
+        console.error("Error saat auto-logout:", error);
+      }
+    };
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(logoutUser, timeoutDuration);
+    };
+
+    // Deteksi berbagai interaksi pengguna
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    
+    // Set timer awal
+    resetTimer();
+
+    // Pasang event listener ke window
+    events.forEach((event) => window.addEventListener(event, resetTimer));
+
+    // Cleanup pasca komponen unmount / rute berpindah
+    return () => {
+      clearTimeout(timer);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [location.pathname, navigate]);
+
+  return null;
+}
+
+/* =========================================
    LAYOUT CONFIGURATION
 ========================================= */
 function LayoutUtama() {
@@ -68,16 +134,17 @@ function LayoutUtama() {
     "/laporan-shift",
   ];
   
-  // ✅ Halaman yang MENAMPILKAN Footer (HAPUS "/" agar footer tidak muncul di beranda)
-  const showFooterRoutes = ["/reservasi"];  // <-- diubah, hanya reservasi yang punya footer
+  // ✅ Halaman yang MENAMPILKAN Footer
+  const showFooterRoutes = ["/reservasi"];
   
-  // Halaman yang menggunakan layout berbeda (tanpa padding tambahan)
   const hideNavbar = hideNavbarRoutes.includes(location.pathname);
   const showFooter = showFooterRoutes.includes(location.pathname);
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
       <ScrollToTop />
+      {/* Deteksi aktivitas idle diletakkan di dalam Router agar bisa menggunakan useNavigate */}
+      <IdleTimeoutHandler /> 
       <ToastNotification />
 
       {!hideNavbar && <Navbar />}
